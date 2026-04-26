@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import enum
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Enum, ForeignKey, String
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, CreatedAtMixin, new_id
@@ -40,6 +41,10 @@ class StaffAccount(Base, CreatedAtMixin):
         back_populates="staff",
         cascade="all, delete-orphan",
         uselist=False,
+    )
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        back_populates="staff",
+        cascade="all, delete-orphan",
     )
     event_access_entries: Mapped[list["StaffEventAccess"]] = relationship(
         back_populates="staff",
@@ -82,6 +87,22 @@ class StaffEventAccess(Base):
 
     staff: Mapped["StaffAccount"] = relationship(back_populates="event_access_entries")
     event: Mapped["Event"] = relationship(back_populates="staff_access_entries")
+
+
+class RefreshToken(Base, CreatedAtMixin):
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    staff_id: Mapped[str] = mapped_column(
+        ForeignKey("staff_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    staff: Mapped["StaffAccount"] = relationship(back_populates="refresh_tokens")
 
 
 from app.models.event import Event  # noqa: E402

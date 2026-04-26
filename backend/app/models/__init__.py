@@ -9,7 +9,14 @@ from app.models.registration import (
     RegistrationFieldValue,
     RegistrationState,
 )
-from app.models.staff import StaffAccessMode, StaffAccessModeRecord, StaffAccount, StaffEventAccess, StaffRole
+from app.models.staff import (
+    RefreshToken,
+    StaffAccessMode,
+    StaffAccessModeRecord,
+    StaffAccount,
+    StaffEventAccess,
+    StaffRole,
+)
 
 __all__ = [
     "BatchRegistration",
@@ -21,6 +28,7 @@ __all__ = [
     "Payment",
     "PaymentGateway",
     "PaymentStatus",
+    "RefreshToken",
     "Registration",
     "RegistrationFieldValue",
     "RegistrationState",

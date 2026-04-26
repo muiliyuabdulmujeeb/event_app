@@ -31,6 +31,10 @@ os.environ.setdefault("JWT_REFRESH_EXPIRY_DAYS", "7")
 os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
 
 from app.core.config import get_settings
+from app.core.security import hash_password
+from app.core.dependencies import get_db_session
+import app.models  # noqa: F401
+from app.models.staff import StaffAccessMode, StaffAccessModeRecord, StaffAccount, StaffRole
 
 get_settings.cache_clear()
 
@@ -92,7 +96,65 @@ async def db_session(async_engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
 
 
 @pytest_asyncio.fixture
-async def client() -> AsyncIterator[AsyncClient]:
+async def client(async_engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
+    session_factory = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_db_session] = override_db_session
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as test_client:
-        yield test_client
+    try:
+        async with AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.pop(get_db_session, None)
+
+
+@pytest_asyncio.fixture
+async def seeded_admin_account(db_session: AsyncSession) -> StaffAccount:
+    account = StaffAccount(
+        email="admin@eventapp.local",
+        password_hash=hash_password("Admin1234!"),
+        role=StaffRole.ADMIN,
+        is_active=True,
+    )
+    db_session.add(account)
+    await db_session.flush()
+    db_session.add(StaffAccessModeRecord(staff_id=account.id, mode=StaffAccessMode.ALL_EVENTS))
+    await db_session.commit()
+    await db_session.refresh(account)
+    return account
+
+
+@pytest_asyncio.fixture
+async def seeded_staff_account(db_session: AsyncSession) -> StaffAccount:
+    account = StaffAccount(
+        email="staff@eventapp.local",
+        password_hash=hash_password("Staff1234!"),
+        role=StaffRole.STAFF,
+        is_active=True,
+    )
+    db_session.add(account)
+    await db_session.flush()
+    db_session.add(StaffAccessModeRecord(staff_id=account.id, mode=StaffAccessMode.ALL_EVENTS))
+    await db_session.commit()
+    await db_session.refresh(account)
+    return account
+
+
+@pytest_asyncio.fixture
+async def disabled_staff_account(db_session: AsyncSession) -> StaffAccount:
+    account = StaffAccount(
+        email="disabled@eventapp.local",
+        password_hash=hash_password("Disabled1234!"),
+        role=StaffRole.STAFF,
+        is_active=False,
+    )
+    db_session.add(account)
+    await db_session.flush()
+    db_session.add(StaffAccessModeRecord(staff_id=account.id, mode=StaffAccessMode.ALL_EVENTS))
+    await db_session.commit()
+    await db_session.refresh(account)
+    return account

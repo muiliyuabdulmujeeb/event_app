@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.v1 import api_router
 from app.core.config import get_settings
 
 
@@ -19,6 +20,8 @@ app = FastAPI(
     openapi_url="/openapi.json",
     lifespan=lifespan,
 )
+
+app.include_router(api_router)
 
 
 @app.get("/health", tags=["health"])

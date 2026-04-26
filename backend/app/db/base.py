@@ -41,18 +41,3 @@ class UpdatedAtMixin:
         onupdate=func.now(),
         nullable=False,
     )
-
-
-from app.models import (  # noqa: E402,F401
-    BatchRegistration,
-    Event,
-    EventFieldDefinition,
-    Payment,
-    Registration,
-    RegistrationFieldValue,
-    StaffAccessModeRecord,
-    StaffAccount,
-    StaffEventAccess,
-    StaffNotification,
-    UserNotification,
-)

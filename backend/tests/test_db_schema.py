@@ -16,7 +16,7 @@ def test_initial_migration_applied(sync_engine) -> None:
     with sync_engine.connect() as connection:
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert revision == "20260426_01"
+    assert revision == "20260426_02"
 
 
 def test_expected_tables_exist(sync_engine) -> None:
@@ -28,6 +28,7 @@ def test_expected_tables_exist(sync_engine) -> None:
         "event_field_definitions",
         "events",
         "payments",
+        "refresh_tokens",
         "registration_field_values",
         "registrations",
         "staff_access_mode",
