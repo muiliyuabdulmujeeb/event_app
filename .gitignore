@@ -9,7 +9,6 @@ __pycache__/
 backend/.pytest_cache/
 backend/.coverage
 backend/htmlcov/
-backend/alembic/versions/
 frontend/node_modules/
 frontend/dist/
 *.pyc
