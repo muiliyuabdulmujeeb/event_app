@@ -1,0 +1,15 @@
+project_requirements.md
+project_spec.md
+.env
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+backend/alembic/versions/
+frontend/node_modules/
+frontend/dist/
+*.pyc
