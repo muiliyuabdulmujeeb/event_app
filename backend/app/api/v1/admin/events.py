@@ -22,6 +22,14 @@ from app.services.event_service import (
 router = APIRouter(prefix="/admin/events", tags=["admin-events"])
 
 
+async def _commit_or_rollback(session: AsyncSession) -> None:
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+
 @router.get("", response_model=AdminEventListResponse)
 async def list_admin_events(
     _: Annotated[StaffAccount, Depends(require_admin)],
@@ -52,8 +60,11 @@ async def create_event(
 ) -> AdminEventDetailResponse:
     service = EventService(session=session)
     try:
-        return await service.create_event(payload=payload, created_by=account)
+        response = await service.create_event(payload=payload, created_by=account)
+        await _commit_or_rollback(session)
+        return response
     except AppError as exc:
+        await session.rollback()
         raise as_http_exception(exc) from exc
 
 
@@ -66,8 +77,11 @@ async def update_event(
 ) -> AdminEventDetailResponse:
     service = EventService(session=session)
     try:
-        return await service.update_event(event_id=event_id, payload=payload)
+        response = await service.update_event(event_id=event_id, payload=payload)
+        await _commit_or_rollback(session)
+        return response
     except AppError as exc:
+        await session.rollback()
         raise as_http_exception(exc) from exc
 
 
@@ -80,6 +94,9 @@ async def update_event_state(
 ) -> AdminEventDetailResponse:
     service = EventService(session=session)
     try:
-        return await service.update_event_state(event_id=event_id, payload=payload)
+        response = await service.update_event_state(event_id=event_id, payload=payload)
+        await _commit_or_rollback(session)
+        return response
     except AppError as exc:
+        await session.rollback()
         raise as_http_exception(exc) from exc

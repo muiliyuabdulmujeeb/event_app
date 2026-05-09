@@ -3,11 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from jose import JWTError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.exceptions import (
     AccountDisabledError,
+    ConflictError,
     InvalidCredentialsError,
     InvalidRefreshTokenError,
 )
@@ -47,13 +49,17 @@ class AuthService:
             account=account,
             settings=self.settings,
         )
-        await self.repository.create_refresh_token(
-            token_id=refresh_token_id,
-            staff_id=account.id,
-            token_hash=hash_token(refresh_token),
-            expires_at=refresh_expires_at,
-        )
-        await self.session.commit()
+        try:
+            await self.repository.create_refresh_token(
+                token_id=refresh_token_id,
+                staff_id=account.id,
+                token_hash=hash_token(refresh_token),
+                expires_at=refresh_expires_at,
+            )
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ConflictError("The login session could not be created. Please try again.") from exc
 
         return LoginResponse(
             access_token=access_token,

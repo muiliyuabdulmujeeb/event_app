@@ -58,7 +58,7 @@ class EventService:
 
         try:
             await self.repository.create(event)
-            await self.session.commit()
+            await self.session.flush()
         except IntegrityError as exc:
             await self.session.rollback()
             raise self._map_integrity_error(exc) from exc
@@ -101,10 +101,10 @@ class EventService:
         event.overflow_rule = self._normalize_overflow_rule(event.capacity, selected_overflow_rule)
 
         if payload.custom_fields is not None:
-            event.field_definitions = self._build_field_definitions(payload.custom_fields)
+            await self._replace_field_definitions(event, payload.custom_fields)
 
         try:
-            await self.session.commit()
+            await self.session.flush()
         except IntegrityError as exc:
             await self.session.rollback()
             raise self._map_integrity_error(exc) from exc
@@ -125,7 +125,7 @@ class EventService:
             )
 
         event.state = payload.state
-        await self.session.commit()
+        await self.session.flush()
         event = await self._get_event_or_raise(event_id)
         return await self._build_admin_detail_response(event)
 
@@ -243,8 +243,17 @@ class EventService:
                 is_required=field.is_required,
                 display_order=field.display_order,
             )
-            for field in custom_fields
+            for field in sorted(custom_fields, key=lambda item: item.display_order)
         ]
+
+    async def _replace_field_definitions(
+        self,
+        event: Event,
+        custom_fields: list[EventCustomFieldInput],
+    ) -> None:
+        event.field_definitions.clear()
+        await self.session.flush()
+        event.field_definitions.extend(self._build_field_definitions(custom_fields))
 
     def _normalize_overflow_rule(self, capacity: int | None, overflow_rule: OverflowRule) -> OverflowRule:
         if capacity is None:

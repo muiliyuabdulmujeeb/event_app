@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import re
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -24,7 +25,7 @@ class EventCustomFieldInput(BaseModel):
     def validate_label(cls, value: str) -> str:
         label = value.strip()
         if not label:
-            raise ValueError("label must not be empty")
+            raise PydanticCustomError("value_error", "label must not be empty")
         return label
 
 
@@ -56,7 +57,7 @@ class EventCreateRequest(BaseModel):
     @field_validator("prefix")
     @classmethod
     def validate_prefix(cls, value: str) -> str:
-        if not __import__("re").fullmatch(PREFIX_PATTERN, value):
+        if not re.fullmatch(PREFIX_PATTERN, value):
             raise PydanticCustomError("value_error", PREFIX_ERROR_MESSAGE)
         return value
 
@@ -64,7 +65,7 @@ class EventCreateRequest(BaseModel):
     def validate_custom_field_order(self) -> Self:
         display_orders = [field.display_order for field in self.custom_fields]
         if len(display_orders) != len(set(display_orders)):
-            raise ValueError("custom_fields display_order values must be unique")
+            raise PydanticCustomError("value_error", "custom_fields display_order values must be unique")
         return self
 
 
@@ -94,7 +95,7 @@ class EventUpdateRequest(BaseModel):
     def validate_optional_prefix(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        if not __import__("re").fullmatch(PREFIX_PATTERN, value):
+        if not re.fullmatch(PREFIX_PATTERN, value):
             raise PydanticCustomError("value_error", PREFIX_ERROR_MESSAGE)
         return value
 
@@ -104,7 +105,7 @@ class EventUpdateRequest(BaseModel):
             return self
         display_orders = [field.display_order for field in self.custom_fields]
         if len(display_orders) != len(set(display_orders)):
-            raise ValueError("custom_fields display_order values must be unique")
+            raise PydanticCustomError("value_error", "custom_fields display_order values must be unique")
         return self
 
 

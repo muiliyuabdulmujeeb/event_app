@@ -73,6 +73,35 @@ async def test_admin_can_create_valid_event(client, seeded_admin_account) -> Non
     assert body["overflow_rule"] == "hard_rejection"
     assert len(body["custom_fields"]) == 2
     assert body["registration_counts"]["total_registrations"] == 0
+    assert [field["display_order"] for field in body["custom_fields"]] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_free_event_creation_sets_is_free_true_and_ignores_overflow_rule_when_capacity_is_null(
+    client,
+    seeded_admin_account,
+) -> None:
+    response = await client.post(
+        "/admin/events",
+        headers=await admin_headers(client),
+        json={
+            "title": "Community Meetup 2026",
+            "description": "A free meetup for local developers.",
+            "event_date": "2026-09-05T14:00:00Z",
+            "location": "Abuja, Nigeria",
+            "prefix": "CMT",
+            "price": 0,
+            "capacity": None,
+            "overflow_rule": "waitlist",
+            "custom_fields": [],
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["is_free"] is True
+    assert body["capacity"] is None
+    assert body["overflow_rule"] == "hard_rejection"
 
 
 @pytest.mark.asyncio
@@ -98,6 +127,41 @@ async def test_invalid_event_prefix_is_rejected(client, seeded_admin_account) ->
 
 
 @pytest.mark.asyncio
+async def test_duplicate_custom_field_display_order_is_rejected_on_create(client, seeded_admin_account) -> None:
+    response = await client.post(
+        "/admin/events",
+        headers=await admin_headers(client),
+        json={
+            "title": "Display Order Clash",
+            "description": "Duplicate display order test.",
+            "event_date": "2026-08-20T10:00:00Z",
+            "location": "Lagos, Nigeria",
+            "prefix": "DOC",
+            "price": 1000,
+            "capacity": 50,
+            "overflow_rule": "waitlist",
+            "custom_fields": [
+                {
+                    "label": "Phone Number",
+                    "field_type": "phone",
+                    "is_required": True,
+                    "display_order": 1,
+                },
+                {
+                    "label": "Company",
+                    "field_type": "text",
+                    "is_required": False,
+                    "display_order": 1,
+                },
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["msg"] == "custom_fields display_order values must be unique"
+
+
+@pytest.mark.asyncio
 async def test_prefix_cannot_be_changed_after_creation(
     client,
     seeded_admin_account,
@@ -111,6 +175,146 @@ async def test_prefix_cannot_be_changed_after_creation(
 
     assert response.status_code == 422
     assert response.json() == {"detail": "Event prefix cannot be changed after creation."}
+
+
+@pytest.mark.asyncio
+async def test_event_update_replaces_custom_fields_and_returns_them_sorted(
+    client,
+    seeded_admin_account,
+    seeded_paid_published_event: Event,
+) -> None:
+    response = await client.patch(
+        f"/admin/events/{seeded_paid_published_event.id}",
+        headers=await admin_headers(client),
+        json={
+            "custom_fields": [
+                {
+                    "label": "Dietary Restrictions",
+                    "field_type": "text",
+                    "is_required": False,
+                    "display_order": 3,
+                },
+                {
+                    "label": "GitHub Username",
+                    "field_type": "text",
+                    "is_required": True,
+                    "display_order": 1,
+                },
+                {
+                    "label": "Arrival Date",
+                    "field_type": "date",
+                    "is_required": False,
+                    "display_order": 2,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [field["label"] for field in body["custom_fields"]] == [
+        "GitHub Username",
+        "Arrival Date",
+        "Dietary Restrictions",
+    ]
+    assert [field["display_order"] for field in body["custom_fields"]] == [1, 2, 3]
+
+
+@pytest.mark.asyncio
+async def test_event_update_without_custom_fields_preserves_existing_field_definitions(
+    client,
+    seeded_admin_account,
+    seeded_paid_published_event: Event,
+) -> None:
+    response = await client.patch(
+        f"/admin/events/{seeded_paid_published_event.id}",
+        headers=await admin_headers(client),
+        json={"title": "Tech Conference 2026 Updated"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "Tech Conference 2026 Updated"
+    assert [field["label"] for field in body["custom_fields"]] == ["Phone Number", "T-Shirt Size"]
+
+
+@pytest.mark.asyncio
+async def test_event_update_with_empty_custom_fields_clears_field_definitions(
+    client,
+    seeded_admin_account,
+    seeded_paid_published_event: Event,
+) -> None:
+    response = await client.patch(
+        f"/admin/events/{seeded_paid_published_event.id}",
+        headers=await admin_headers(client),
+        json={"custom_fields": []},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["custom_fields"] == []
+
+
+@pytest.mark.asyncio
+async def test_duplicate_custom_field_display_order_is_rejected_on_update(
+    client,
+    seeded_admin_account,
+    seeded_paid_published_event: Event,
+) -> None:
+    response = await client.patch(
+        f"/admin/events/{seeded_paid_published_event.id}",
+        headers=await admin_headers(client),
+        json={
+            "custom_fields": [
+                {
+                    "label": "GitHub Username",
+                    "field_type": "text",
+                    "is_required": True,
+                    "display_order": 2,
+                },
+                {
+                    "label": "Arrival Date",
+                    "field_type": "date",
+                    "is_required": False,
+                    "display_order": 2,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["msg"] == "custom_fields display_order values must be unique"
+
+
+@pytest.mark.asyncio
+async def test_custom_field_label_cannot_be_blank(
+    client,
+    seeded_admin_account,
+) -> None:
+    response = await client.post(
+        "/admin/events",
+        headers=await admin_headers(client),
+        json={
+            "title": "Blank Label Event",
+            "description": "Blank label test.",
+            "event_date": "2026-08-20T10:00:00Z",
+            "location": "Lagos, Nigeria",
+            "prefix": "BLE",
+            "price": 1000,
+            "capacity": 50,
+            "overflow_rule": "hard_rejection",
+            "custom_fields": [
+                {
+                    "label": "   ",
+                    "field_type": "text",
+                    "is_required": True,
+                    "display_order": 1,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["msg"] == "label must not be empty"
 
 
 @pytest.mark.asyncio
@@ -192,6 +396,7 @@ async def test_published_event_is_visible_on_public_endpoints(
     assert detail_body["id"] == seeded_paid_published_event.id
     assert detail_body["state"] == "published"
     assert len(detail_body["custom_fields"]) == 2
+    assert [field["display_order"] for field in detail_body["custom_fields"]] == [1, 2]
 
 
 @pytest.mark.asyncio
@@ -356,3 +561,23 @@ async def test_staff_cannot_access_admin_event_routes(
     response = await client.get("/admin/events", headers=await staff_headers(client))
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_and_public_event_detail_return_matching_field_definitions(
+    client,
+    seeded_paid_published_event: Event,
+) -> None:
+    admin_response = await client.get(
+        f"/admin/events/{seeded_paid_published_event.id}",
+        headers=await admin_headers(client),
+    )
+    public_response = await client.get(f"/events/{seeded_paid_published_event.id}")
+
+    assert admin_response.status_code == 200
+    assert public_response.status_code == 200
+
+    admin_fields = admin_response.json()["custom_fields"]
+    public_fields = public_response.json()["custom_fields"]
+
+    assert admin_fields == public_fields

@@ -19,6 +19,14 @@ from app.services.auth_service import AuthService
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+async def _commit_or_rollback(session: AsyncSession) -> None:
+    try:
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+
+
 @router.post("/login", response_model=LoginResponse)
 async def login(
     payload: LoginRequest,
@@ -27,8 +35,11 @@ async def login(
 ) -> LoginResponse:
     service = AuthService(session=session, settings=settings)
     try:
-        return await service.login(email=payload.email, password=payload.password)
+        response = await service.login(email=payload.email, password=payload.password)
+        await _commit_or_rollback(session)
+        return response
     except AppError as exc:
+        await session.rollback()
         raise as_http_exception(exc) from exc
 
 
@@ -40,6 +51,9 @@ async def refresh_access_token(
 ) -> RefreshAccessTokenResponse:
     service = AuthService(session=session, settings=settings)
     try:
-        return await service.refresh_access_token(refresh_token=payload.refresh_token)
+        response = await service.refresh_access_token(refresh_token=payload.refresh_token)
+        await _commit_or_rollback(session)
+        return response
     except AppError as exc:
+        await session.rollback()
         raise as_http_exception(exc) from exc
