@@ -88,6 +88,7 @@ class Event(Base, CreatedAtMixin, UpdatedAtMixin):
     field_definitions: Mapped[list["EventFieldDefinition"]] = relationship(
         back_populates="event",
         cascade="all, delete-orphan",
+        order_by="EventFieldDefinition.display_order",
     )
     registrations: Mapped[list["Registration"]] = relationship(
         back_populates="event",

@@ -10,6 +10,7 @@ from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from datetime import datetime, timezone
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -34,6 +35,7 @@ from app.core.config import get_settings
 from app.core.security import hash_password
 from app.core.dependencies import get_db_session
 import app.models  # noqa: F401
+from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
 from app.models.staff import StaffAccessMode, StaffAccessModeRecord, StaffAccount, StaffRole
 
 get_settings.cache_clear()
@@ -158,3 +160,120 @@ async def disabled_staff_account(db_session: AsyncSession) -> StaffAccount:
     await db_session.commit()
     await db_session.refresh(account)
     return account
+
+
+async def _create_event_fixture(
+    db_session: AsyncSession,
+    *,
+    created_by: StaffAccount,
+    title: str,
+    description: str,
+    event_date: datetime,
+    location: str,
+    prefix: str,
+    price: int,
+    capacity: int | None,
+    overflow_rule: OverflowRule,
+    state: EventState,
+    custom_fields: list[EventFieldDefinition] | None = None,
+) -> Event:
+    event = Event(
+        title=title,
+        description=description,
+        event_date=event_date,
+        location=location,
+        prefix=prefix,
+        price=price,
+        capacity=capacity,
+        overflow_rule=overflow_rule,
+        state=state,
+        created_by=created_by.id,
+    )
+    event.field_definitions = custom_fields or []
+    db_session.add(event)
+    await db_session.commit()
+    await db_session.refresh(event)
+    return event
+
+
+@pytest_asyncio.fixture
+async def seeded_free_published_event(
+    db_session: AsyncSession,
+    seeded_admin_account: StaffAccount,
+) -> Event:
+    return await _create_event_fixture(
+        db_session,
+        created_by=seeded_admin_account,
+        title="Community Meetup 2026",
+        description="A free meetup for local developers.",
+        event_date=datetime(2026, 9, 5, 14, 0, tzinfo=timezone.utc),
+        location="Abuja, Nigeria",
+        prefix="CMT",
+        price=0,
+        capacity=None,
+        overflow_rule=OverflowRule.HARD_REJECTION,
+        state=EventState.PUBLISHED,
+        custom_fields=[
+            EventFieldDefinition(
+                label="Phone Number",
+                field_type=FieldType.PHONE,
+                is_required=True,
+                display_order=1,
+            )
+        ],
+    )
+
+
+@pytest_asyncio.fixture
+async def seeded_paid_published_event(
+    db_session: AsyncSession,
+    seeded_admin_account: StaffAccount,
+) -> Event:
+    return await _create_event_fixture(
+        db_session,
+        created_by=seeded_admin_account,
+        title="Tech Conference 2026",
+        description="Annual technology conference for developers.",
+        event_date=datetime(2026, 8, 20, 10, 0, tzinfo=timezone.utc),
+        location="Lagos, Nigeria",
+        prefix="TEC",
+        price=5000,
+        capacity=100,
+        overflow_rule=OverflowRule.WAITLIST,
+        state=EventState.PUBLISHED,
+        custom_fields=[
+            EventFieldDefinition(
+                label="Phone Number",
+                field_type=FieldType.PHONE,
+                is_required=True,
+                display_order=1,
+            ),
+            EventFieldDefinition(
+                label="T-Shirt Size",
+                field_type=FieldType.TEXT,
+                is_required=False,
+                display_order=2,
+            ),
+        ],
+    )
+
+
+@pytest_asyncio.fixture
+async def seeded_draft_event(
+    db_session: AsyncSession,
+    seeded_admin_account: StaffAccount,
+) -> Event:
+    return await _create_event_fixture(
+        db_session,
+        created_by=seeded_admin_account,
+        title="Private Planning Session",
+        description="Internal planning event.",
+        event_date=datetime(2026, 7, 1, 9, 0, tzinfo=timezone.utc),
+        location="Port Harcourt, Nigeria",
+        prefix="PLN",
+        price=2500,
+        capacity=40,
+        overflow_rule=OverflowRule.HARD_REJECTION,
+        state=EventState.DRAFT,
+        custom_fields=[],
+    )

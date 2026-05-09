@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from fastapi import HTTPException, status
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.exceptions import (
+    AccountDisabledError,
+    InvalidCredentialsError,
+    InvalidRefreshTokenError,
+)
 from app.core.security import (
     REFRESH_TOKEN_TYPE,
     access_token_expiry,
@@ -21,10 +25,6 @@ from app.core.security import (
 from app.repositories.staff_repository import StaffRepository
 from app.schemas.staff import LoginResponse, RefreshAccessTokenResponse
 
-INVALID_LOGIN_DETAIL = "Invalid email or password."
-DISABLED_ACCOUNT_DETAIL = "This account has been disabled."
-INVALID_REFRESH_DETAIL = "Refresh token is invalid or has expired. Please log in again."
-
 
 @dataclass
 class AuthService:
@@ -37,10 +37,10 @@ class AuthService:
     async def login(self, *, email: str, password: str) -> LoginResponse:
         account = await self.repository.get_by_email(email)
         if account is None or not verify_password(password, account.password_hash):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_LOGIN_DETAIL)
+            raise InvalidCredentialsError()
 
         if not account.is_active:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DISABLED_ACCOUNT_DETAIL)
+            raise AccountDisabledError()
 
         access_token, _ = create_access_token(account=account, settings=self.settings)
         refresh_token, refresh_expires_at, refresh_token_id = create_refresh_token(
@@ -68,15 +68,15 @@ class AuthService:
         try:
             payload = decode_token(refresh_token, settings=self.settings)
         except JWTError as exc:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_REFRESH_DETAIL) from exc
+            raise InvalidRefreshTokenError() from exc
 
         if payload.get("token_type") != REFRESH_TOKEN_TYPE:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_REFRESH_DETAIL)
+            raise InvalidRefreshTokenError()
 
         token_id = payload.get("jti")
         staff_id = payload.get("sub")
         if not isinstance(token_id, str) or not isinstance(staff_id, str):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_REFRESH_DETAIL)
+            raise InvalidRefreshTokenError()
 
         stored_token = await self.repository.get_refresh_token(token_id)
         if (
@@ -86,14 +86,14 @@ class AuthService:
             or stored_token.expires_at <= utc_now()
             or stored_token.token_hash != hash_token(refresh_token)
         ):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_REFRESH_DETAIL)
+            raise InvalidRefreshTokenError()
 
         account = await self.repository.get_by_id(staff_id)
         if account is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=INVALID_REFRESH_DETAIL)
+            raise InvalidRefreshTokenError()
 
         if not account.is_active:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DISABLED_ACCOUNT_DETAIL)
+            raise AccountDisabledError()
 
         access_token, _ = create_access_token(account=account, settings=self.settings)
         return RefreshAccessTokenResponse(

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.dependencies import get_app_settings, get_db_session
+from app.core.exceptions import AppError, as_http_exception
 from app.schemas.staff import (
     LoginRequest,
     LoginResponse,
@@ -25,7 +26,10 @@ async def login(
     settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> LoginResponse:
     service = AuthService(session=session, settings=settings)
-    return await service.login(email=payload.email, password=payload.password)
+    try:
+        return await service.login(email=payload.email, password=payload.password)
+    except AppError as exc:
+        raise as_http_exception(exc) from exc
 
 
 @router.post("/refresh", response_model=RefreshAccessTokenResponse)
@@ -35,4 +39,7 @@ async def refresh_access_token(
     settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> RefreshAccessTokenResponse:
     service = AuthService(session=session, settings=settings)
-    return await service.refresh_access_token(refresh_token=payload.refresh_token)
+    try:
+        return await service.refresh_access_token(refresh_token=payload.refresh_token)
+    except AppError as exc:
+        raise as_http_exception(exc) from exc
