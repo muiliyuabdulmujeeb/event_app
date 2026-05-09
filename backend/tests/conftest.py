@@ -8,8 +8,9 @@ import pytest_asyncio
 from alembic import command
 from alembic.config import Config
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +29,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("JWT_SECRET", "changeme")
 os.environ.setdefault("JWT_ACCESS_EXPIRY_HOURS", "1")
 os.environ.setdefault("JWT_REFRESH_EXPIRY_DAYS", "7")
+os.environ.setdefault("EMAIL_PROVIDER", "mock")
 
 os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
 
@@ -37,6 +39,7 @@ from app.core.dependencies import get_db_session
 import app.models  # noqa: F401
 from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
 from app.models.staff import StaffAccessMode, StaffAccessModeRecord, StaffAccount, StaffRole
+from app.workers.email_tasks import send_email_task
 
 get_settings.cache_clear()
 
@@ -112,6 +115,18 @@ async def client(async_engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
             yield test_client
     finally:
         app.dependency_overrides.pop(get_db_session, None)
+
+
+@pytest.fixture
+def captured_email_tasks(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    captured: list[dict] = []
+
+    def fake_delay(payload: dict) -> dict:
+        captured.append(payload)
+        return payload
+
+    monkeypatch.setattr(send_email_task, "delay", fake_delay)
+    return captured
 
 
 @pytest_asyncio.fixture
@@ -192,8 +207,12 @@ async def _create_event_fixture(
     event.field_definitions = custom_fields or []
     db_session.add(event)
     await db_session.commit()
-    await db_session.refresh(event)
-    return event
+    result = await db_session.execute(
+        select(Event)
+        .where(Event.id == event.id)
+        .options(selectinload(Event.field_definitions))
+    )
+    return result.scalar_one()
 
 
 @pytest_asyncio.fixture

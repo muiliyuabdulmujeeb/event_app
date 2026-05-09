@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 
 
 class AppError(Exception):
     status_code: int = 500
     detail: str = "An unexpected error occurred."
+    extra: dict[str, Any]
 
-    def __init__(self, detail: str | None = None) -> None:
+    def __init__(self, detail: str | None = None, *, extra: dict[str, Any] | None = None) -> None:
         if detail is not None:
             self.detail = detail
+        self.extra = extra or {}
         super().__init__(self.detail)
+
+    def to_payload(self) -> dict[str, Any]:
+        return {"detail": self.detail, **self.extra}
 
 
 class AuthenticationError(AppError):
@@ -57,5 +65,22 @@ class EventConflictError(ConflictError):
     pass
 
 
+class RegistrationValidationError(ValidationError):
+    pass
+
+
+class RegistrationConflictError(ConflictError):
+    pass
+
+
+class DuplicateRegistrationError(RegistrationConflictError):
+    def __init__(self, detail: str = "This email has already been used to register for this event.") -> None:
+        super().__init__(detail, extra={"duplicate_email": True})
+
+
 def as_http_exception(error: AppError) -> HTTPException:
     return HTTPException(status_code=error.status_code, detail=error.detail)
+
+
+def error_response(error: AppError) -> JSONResponse:
+    return JSONResponse(status_code=error.status_code, content=error.to_payload())
