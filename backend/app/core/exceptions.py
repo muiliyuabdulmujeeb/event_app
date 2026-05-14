@@ -78,6 +78,22 @@ class DuplicateRegistrationError(RegistrationConflictError):
         super().__init__(detail, extra={"duplicate_email": True})
 
 
+class DuplicateBatchSubmissionError(RegistrationValidationError):
+    def __init__(self, duplicate_emails: list[str]) -> None:
+        super().__init__(
+            "Duplicate emails found within this batch. Each participant must have a unique email address.",
+            extra={"duplicate_emails": duplicate_emails},
+        )
+
+
+class DuplicateBatchExistingRegistrationError(RegistrationConflictError):
+    def __init__(self, duplicate_emails: list[str]) -> None:
+        super().__init__(
+            "One or more participants are already registered for this event. Re-submit with acknowledge_duplicates: true to proceed.",
+            extra={"duplicate_emails": duplicate_emails, "duplicate_warning": True},
+        )
+
+
 def as_http_exception(error: AppError) -> HTTPException:
     return HTTPException(status_code=error.status_code, detail=error.detail)
 

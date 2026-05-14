@@ -1,6 +1,6 @@
 import os
 import sys
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import pytest
@@ -59,7 +59,7 @@ def build_alembic_config() -> Config:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def migrated_database() -> None:
+def migrated_database() -> Iterator[None]:
     command.upgrade(build_alembic_config(), "head")
     yield
 

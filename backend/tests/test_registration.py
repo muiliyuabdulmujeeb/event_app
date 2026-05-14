@@ -4,14 +4,14 @@ from datetime import datetime, timezone
 import re
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
 from app.core.exceptions import RegistrationValidationError
 from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
 from app.models.payment import Payment, PaymentStatus
-from app.models.registration import Registration, RegistrationState
+from app.models.registration import BatchRegistration, Registration, RegistrationState
 from app.models.staff import StaffAccount
 from app.services.registration_service import RegistrationService
 
@@ -52,6 +52,48 @@ async def create_event(
         .options(selectinload(Event.field_definitions))
     )
     return result.scalar_one()
+
+
+def build_batch_payload(field_definition_id: str, *, acknowledge_duplicates: bool = False) -> dict:
+    return {
+        "submitter_name": "Chidi Okonkwo",
+        "submitter_email": "submitter@example.com",
+        "acknowledge_duplicates": acknowledge_duplicates,
+        "participants": [
+            {
+                "first_name": "Ngozi",
+                "last_name": "Eze",
+                "email": "ngozi@example.com",
+                "custom_field_values": [
+                    {"field_definition_id": field_definition_id, "value": "+2348011111111"}
+                ],
+            },
+            {
+                "first_name": "Emeka",
+                "last_name": "Obi",
+                "email": "emeka@example.com",
+                "custom_field_values": [
+                    {"field_definition_id": field_definition_id, "value": "+2348022222222"}
+                ],
+            },
+            {
+                "first_name": "Fatima",
+                "last_name": "Aliyu",
+                "email": "fatima@example.com",
+                "custom_field_values": [
+                    {"field_definition_id": field_definition_id, "value": "+2348033333333"}
+                ],
+            },
+            {
+                "first_name": "Chinedu",
+                "last_name": "Nwosu",
+                "email": "chinedu@example.com",
+                "custom_field_values": [
+                    {"field_definition_id": field_definition_id, "value": "+2348044444444"}
+                ],
+            },
+        ],
+    }
 
 
 @pytest.mark.asyncio
@@ -603,3 +645,200 @@ def test_registration_state_transition_rules() -> None:
 
     with pytest.raises(RegistrationValidationError, match="Invalid registration state transition"):
         service.validate_state_transition(RegistrationState.CONFIRMED, RegistrationState.FAILED)
+
+
+@pytest.mark.asyncio
+async def test_batch_registration_requires_minimum_of_four_participants(
+    client,
+    seeded_free_published_event: Event,
+) -> None:
+    phone_field = seeded_free_published_event.field_definitions[0]
+    payload = build_batch_payload(phone_field.id)
+    payload["participants"] = payload["participants"][:3]
+
+    response = await client.post(f"/register/{seeded_free_published_event.id}/batch", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Batch registration requires a minimum of 4 participants."}
+
+
+@pytest.mark.asyncio
+async def test_free_batch_registration_is_immediately_confirmed(
+    client,
+    db_session,
+    seeded_free_published_event: Event,
+    captured_email_tasks: list[dict],
+) -> None:
+    phone_field = seeded_free_published_event.field_definitions[0]
+
+    response = await client.post(
+        f"/register/{seeded_free_published_event.id}/batch",
+        json=build_batch_payload(phone_field.id),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["state"] == "confirmed"
+    assert body["total_amount"] == 0
+    assert body["currency"] == "NGN"
+    assert body["participant_count"] == 4
+    assert body["payment_url"] is None
+    assert body["message"] == "Batch registration confirmed. Tickets have been sent to all participants."
+    assert len(body["participants"]) == 4
+    assert len({participant["reg_id"] for participant in body["participants"]}) == 4
+    assert all(REG_ID_PATTERN.fullmatch(participant["reg_id"]) for participant in body["participants"])
+    assert len(captured_email_tasks) == 4
+
+    registrations = (await db_session.execute(select(Registration))).scalars().all()
+    assert len(registrations) == 4
+    assert all(registration.state == RegistrationState.CONFIRMED for registration in registrations)
+    assert (await db_session.execute(select(func.count(Payment.id)))).scalar_one() == 0
+
+    batches = (await db_session.execute(select(BatchRegistration))).scalars().all()
+    assert len(batches) == 1
+    assert batches[0].submitter_email == "submitter@example.com"
+
+
+@pytest.mark.asyncio
+async def test_paid_batch_registration_starts_as_pending_payment(
+    client,
+    db_session,
+    seeded_paid_published_event: Event,
+    captured_email_tasks: list[dict],
+) -> None:
+    phone_field = seeded_paid_published_event.field_definitions[0]
+
+    response = await client.post(
+        f"/register/{seeded_paid_published_event.id}/batch",
+        json=build_batch_payload(phone_field.id),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["state"] == "pending_payment"
+    assert body["total_amount"] == 20000
+    assert body["participant_count"] == 4
+    assert body["payment_url"].startswith("http://localhost:8000/mock-payment/pay?ref=MOCK_")
+    assert body["message"] == "Batch registration created. Complete payment to confirm all spots."
+    assert len(captured_email_tasks) == 0
+
+    payments = (await db_session.execute(select(Payment))).scalars().all()
+    assert len(payments) == 1
+    assert payments[0].status == PaymentStatus.PENDING
+    assert payments[0].amount == 20000
+    assert payments[0].batch_id is not None
+
+    registrations = (await db_session.execute(select(Registration))).scalars().all()
+    assert len(registrations) == 4
+    assert all(registration.state == RegistrationState.PENDING_PAYMENT for registration in registrations)
+    assert len({registration.batch_id for registration in registrations}) == 1
+    assert registrations[0].batch_id == payments[0].batch_id
+
+
+@pytest.mark.asyncio
+async def test_batch_submitter_is_not_registered_unless_included_as_participant(
+    client,
+    db_session,
+    seeded_free_published_event: Event,
+) -> None:
+    phone_field = seeded_free_published_event.field_definitions[0]
+
+    response = await client.post(
+        f"/register/{seeded_free_published_event.id}/batch",
+        json=build_batch_payload(phone_field.id),
+    )
+
+    assert response.status_code == 201
+
+    registrations = (await db_session.execute(select(Registration))).scalars().all()
+    assert len(registrations) == 4
+    assert all(registration.email != "submitter@example.com" for registration in registrations)
+
+
+@pytest.mark.asyncio
+async def test_intra_batch_duplicate_emails_return_422_and_create_no_records(
+    client,
+    db_session,
+    seeded_free_published_event: Event,
+) -> None:
+    phone_field = seeded_free_published_event.field_definitions[0]
+    payload = build_batch_payload(phone_field.id)
+    payload["participants"][3]["email"] = "ngozi@example.com"
+
+    response = await client.post(f"/register/{seeded_free_published_event.id}/batch", json=payload)
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "Duplicate emails found within this batch. Each participant must have a unique email address.",
+        "duplicate_emails": ["ngozi@example.com"],
+    }
+    assert (await db_session.execute(select(func.count(Registration.id)))).scalar_one() == 0
+    assert (await db_session.execute(select(func.count(BatchRegistration.id)))).scalar_one() == 0
+
+
+@pytest.mark.asyncio
+async def test_cross_registration_duplicate_without_acknowledgement_returns_409_and_creates_no_records(
+    client,
+    db_session,
+    seeded_free_published_event: Event,
+) -> None:
+    phone_field = seeded_free_published_event.field_definitions[0]
+    db_session.add(
+        Registration(
+            event_id=seeded_free_published_event.id,
+            first_name="Existing",
+            last_name="Registrant",
+            email="ngozi@example.com",
+            reg_id="CMT-2026-ABC123",
+            state=RegistrationState.CONFIRMED,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.post(
+        f"/register/{seeded_free_published_event.id}/batch",
+        json=build_batch_payload(phone_field.id),
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "One or more participants are already registered for this event. Re-submit with acknowledge_duplicates: true to proceed.",
+        "duplicate_emails": ["ngozi@example.com"],
+        "duplicate_warning": True,
+    }
+    assert (await db_session.execute(select(func.count(BatchRegistration.id)))).scalar_one() == 0
+    assert (await db_session.execute(select(func.count(Registration.id)))).scalar_one() == 1
+
+
+@pytest.mark.asyncio
+async def test_cross_registration_duplicate_with_acknowledgement_proceeds(
+    client,
+    db_session,
+    seeded_paid_published_event: Event,
+) -> None:
+    phone_field = seeded_paid_published_event.field_definitions[0]
+    db_session.add(
+        Registration(
+            event_id=seeded_paid_published_event.id,
+            first_name="Existing",
+            last_name="Registrant",
+            email="ngozi@example.com",
+            reg_id="TEC-2026-ABC123",
+            state=RegistrationState.CONFIRMED,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.post(
+        f"/register/{seeded_paid_published_event.id}/batch",
+        json=build_batch_payload(phone_field.id, acknowledge_duplicates=True),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["state"] == "pending_payment"
+    assert len(body["participants"]) == 4
+
+    registrations = (await db_session.execute(select(Registration))).scalars().all()
+    assert len(registrations) == 5
+    assert sum(1 for registration in registrations if registration.email == "ngozi@example.com") == 2

@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.exceptions import (
+    DuplicateBatchExistingRegistrationError,
+    DuplicateBatchSubmissionError,
     DuplicateRegistrationError,
     EventConflictError,
     EventNotFoundError,
@@ -20,9 +22,14 @@ from app.core.exceptions import (
 )
 from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
 from app.models.payment import Payment, PaymentGateway, PaymentStatus
-from app.models.registration import Registration, RegistrationFieldValue, RegistrationState
+from app.models.registration import BatchRegistration, Registration, RegistrationFieldValue, RegistrationState
 from app.repositories.registration_repository import RegistrationRepository
 from app.schemas.registration import (
+    BatchParticipantRegistrationInput,
+    BatchRegistrationCreateRequest,
+    BatchRegistrationCreateResponse,
+    BatchRegistrationParticipantResponse,
+    BatchRegistrationServiceResult,
     RegistrationCreateRequest,
     RegistrationCreateResponse,
     RegistrationServiceResult,
@@ -71,13 +78,9 @@ class RegistrationService:
         event_id: str,
         payload: RegistrationCreateRequest,
     ) -> RegistrationServiceResult:
-        event = await self.repository.get_event_with_fields(event_id)
-        if event is None or event.state == EventState.DRAFT:
-            raise EventNotFoundError("Event not found.")
-        if event.state in {EventState.CANCELLED, EventState.COMPLETED}:
-            raise RegistrationConflictError("This event is no longer accepting registrations.")
+        event = await self._load_public_event_or_raise(event_id)
 
-        await self._validate_duplicate_email(event.id, payload)
+        await self._validate_duplicate_email(event.id, payload.email, payload.acknowledge_duplicate)
 
         submitted_values = self._normalize_custom_field_values(payload.custom_field_values)
         self._validate_custom_field_values(event, submitted_values)
@@ -88,7 +91,7 @@ class RegistrationService:
             event_id=event.id,
             first_name=payload.first_name,
             last_name=payload.last_name,
-            email=str(payload.email),
+            email=payload.email,
             reg_id=reg_id,
             state=registration_state,
             waitlist_position=(
@@ -97,30 +100,115 @@ class RegistrationService:
                 else None
             ),
         )
+        registration.field_values = self._build_field_values(submitted_values)
 
-        registration.field_values = self._build_field_values(event, submitted_values)
-
+        payment_url: str | None = None
         try:
             await self.repository.create_registration(registration)
-
-            payment_url: str | None = None
             if registration_state == RegistrationState.PENDING_PAYMENT:
-                payment_url = await self._create_pending_payment(registration, event)
+                payment_url = await self._create_pending_registration_payment(registration, event)
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise EventConflictError("The registration could not be saved because it conflicts with existing data.") from exc
+
+        response = self._build_single_response(registration, event.is_free, payment_url)
+        ticket_email_payload = (
+            self._build_ticket_email_payload(event, registration)
+            if registration_state == RegistrationState.CONFIRMED
+            else None
+        )
+        return RegistrationServiceResult(response=response, ticket_email_payload=ticket_email_payload)
+
+    async def create_batch_registration(
+        self,
+        event_id: str,
+        payload: BatchRegistrationCreateRequest,
+    ) -> BatchRegistrationServiceResult:
+        event = await self._load_public_event_or_raise(event_id)
+
+        if len(payload.participants) < 4:
+            raise RegistrationValidationError("Batch registration requires a minimum of 4 participants.")
+
+        participant_emails = [participant.email for participant in payload.participants]
+        self._validate_intra_batch_duplicate_emails(participant_emails)
+        await self._validate_existing_batch_duplicate_emails(
+            event.id,
+            participant_emails,
+            payload.acknowledge_duplicates,
+        )
+
+        batch_state = await self._determine_batch_initial_state(event, len(payload.participants))
+        total_amount = event.price * len(payload.participants)
+        batch_registration = BatchRegistration(
+            event_id=event.id,
+            submitter_name=payload.submitter_name,
+            submitter_email=payload.submitter_email,
+            total_amount=total_amount,
+            payment_reference=None,
+        )
+
+        participant_responses: list[BatchRegistrationParticipantResponse] = []
+        ticket_email_payloads: list[dict] = []
+        payment_url: str | None = None
+
+        try:
+            await self.repository.create_batch_registration(batch_registration)
+            starting_waitlist_position = (
+                await self._next_waitlist_position(event.id)
+                if batch_state == RegistrationState.WAITLISTED
+                else None
+            )
+
+            for index, participant in enumerate(payload.participants):
+                submitted_values = self._normalize_custom_field_values(participant.custom_field_values)
+                self._validate_custom_field_values(event, submitted_values)
+
+                reg_id = await self._generate_reg_id(event)
+                registration = Registration(
+                    event_id=event.id,
+                    first_name=participant.first_name,
+                    last_name=participant.last_name,
+                    email=participant.email,
+                    reg_id=reg_id,
+                    state=batch_state,
+                    batch_id=batch_registration.id,
+                    waitlist_position=(
+                        starting_waitlist_position + index
+                        if starting_waitlist_position is not None
+                        else None
+                    ),
+                )
+                registration.field_values = self._build_field_values(submitted_values)
+                await self.repository.create_registration(registration)
+
+                participant_responses.append(
+                    BatchRegistrationParticipantResponse(
+                        reg_id=registration.reg_id,
+                        first_name=registration.first_name,
+                        last_name=registration.last_name,
+                        email=registration.email,
+                    )
+                )
+                if batch_state == RegistrationState.CONFIRMED:
+                    ticket_email_payloads.append(self._build_ticket_email_payload(event, registration))
+
+            if batch_state == RegistrationState.PENDING_PAYMENT:
+                payment_url = await self._create_pending_batch_payment(batch_registration)
 
             await self.session.flush()
         except IntegrityError as exc:
             await self.session.rollback()
             raise EventConflictError("The registration could not be saved because it conflicts with existing data.") from exc
 
-        response = self._build_response(registration, event.is_free, payment_url)
-        ticket_email_payload = None
-        if registration_state == RegistrationState.CONFIRMED:
-            ticket_email_payload = self._build_ticket_email_payload(event, registration)
-
-        return RegistrationServiceResult(
-            response=response,
-            ticket_email_payload=ticket_email_payload,
+        response = self._build_batch_response(
+            batch_registration=batch_registration,
+            participant_count=len(payload.participants),
+            participants=participant_responses,
+            state=batch_state,
+            payment_url=payment_url,
         )
+        return BatchRegistrationServiceResult(response=response, ticket_email_payloads=ticket_email_payloads)
 
     def validate_state_transition(
         self,
@@ -132,10 +220,39 @@ class RegistrationService:
                 f"Invalid registration state transition from '{current_state.value}' to '{next_state.value}'."
             )
 
-    async def _validate_duplicate_email(self, event_id: str, payload: RegistrationCreateRequest) -> None:
-        email_exists = await self.repository.email_exists_for_event(event_id, str(payload.email))
-        if email_exists and not payload.acknowledge_duplicate:
+    async def _load_public_event_or_raise(self, event_id: str) -> Event:
+        event = await self.repository.get_event_with_fields(event_id)
+        if event is None or event.state == EventState.DRAFT:
+            raise EventNotFoundError("Event not found.")
+        if event.state in {EventState.CANCELLED, EventState.COMPLETED}:
+            raise RegistrationConflictError("This event is no longer accepting registrations.")
+        return event
+
+    async def _validate_duplicate_email(self, event_id: str, email: str, acknowledged: bool) -> None:
+        email_exists = await self.repository.email_exists_for_event(event_id, email)
+        if email_exists and not acknowledged:
             raise DuplicateRegistrationError()
+
+    def _validate_intra_batch_duplicate_emails(self, participant_emails: list[str]) -> None:
+        seen: set[str] = set()
+        duplicates: set[str] = set()
+        for email in participant_emails:
+            lowered = email.lower()
+            if lowered in seen:
+                duplicates.add(lowered)
+            seen.add(lowered)
+        if duplicates:
+            raise DuplicateBatchSubmissionError(sorted(duplicates))
+
+    async def _validate_existing_batch_duplicate_emails(
+        self,
+        event_id: str,
+        participant_emails: list[str],
+        acknowledged: bool,
+    ) -> None:
+        duplicate_emails = await self.repository.existing_emails_for_event(event_id, participant_emails)
+        if duplicate_emails and not acknowledged:
+            raise DuplicateBatchExistingRegistrationError(duplicate_emails)
 
     def _normalize_custom_field_values(self, custom_field_values: list) -> dict[str, str]:
         normalized: dict[str, str] = {}
@@ -169,8 +286,7 @@ class RegistrationService:
         for field_definition in event.field_definitions:
             if field_definition.id not in submitted_values:
                 continue
-            value = submitted_values[field_definition.id]
-            self._validate_custom_field_value(field_definition, value)
+            self._validate_custom_field_value(field_definition, submitted_values[field_definition.id])
 
     def _validate_custom_field_value(self, field_definition: EventFieldDefinition, value: str) -> None:
         if field_definition.field_type == FieldType.TEXT:
@@ -197,12 +313,10 @@ class RegistrationService:
                     f"Field '{field_definition.label}' must be a valid phone number."
                 )
             return
-        if field_definition.field_type == FieldType.EMAIL:
-            if not EMAIL_REGEX.fullmatch(value):
-                raise RegistrationValidationError(
-                    f"Field '{field_definition.label}' must be a valid email address."
-                )
-            return
+        if field_definition.field_type == FieldType.EMAIL and not EMAIL_REGEX.fullmatch(value):
+            raise RegistrationValidationError(
+                f"Field '{field_definition.label}' must be a valid email address."
+            )
 
     async def _determine_initial_state(self, event: Event) -> RegistrationState:
         if event.capacity is None:
@@ -210,6 +324,20 @@ class RegistrationService:
 
         occupied_slots = await self.repository.count_capacity_occupying_registrations(event.id)
         if occupied_slots < event.capacity:
+            return RegistrationState.CONFIRMED if event.is_free else RegistrationState.PENDING_PAYMENT
+
+        if event.overflow_rule == OverflowRule.HARD_REJECTION:
+            raise RegistrationConflictError("This event is fully booked and is not accepting further registrations.")
+
+        return RegistrationState.WAITLISTED
+
+    async def _determine_batch_initial_state(self, event: Event, participant_count: int) -> RegistrationState:
+        if event.capacity is None:
+            return RegistrationState.CONFIRMED if event.is_free else RegistrationState.PENDING_PAYMENT
+
+        occupied_slots = await self.repository.count_capacity_occupying_registrations(event.id)
+        available_slots = max(event.capacity - occupied_slots, 0)
+        if available_slots >= participant_count:
             return RegistrationState.CONFIRMED if event.is_free else RegistrationState.PENDING_PAYMENT
 
         if event.overflow_rule == OverflowRule.HARD_REJECTION:
@@ -229,18 +357,16 @@ class RegistrationService:
     async def _next_waitlist_position(self, event_id: str) -> int:
         return await self.repository.count_waitlisted_registrations(event_id) + 1
 
-    def _build_field_values(self, event: Event, submitted_values: dict[str, str]) -> list[RegistrationFieldValue]:
-        field_order = {field.id: field for field in event.field_definitions}
+    def _build_field_values(self, submitted_values: dict[str, str]) -> list[RegistrationFieldValue]:
         return [
             RegistrationFieldValue(
                 field_definition_id=field_id,
                 value=value,
             )
             for field_id, value in submitted_values.items()
-            if field_id in field_order
         ]
 
-    async def _create_pending_payment(self, registration: Registration, event: Event) -> str:
+    async def _create_pending_registration_payment(self, registration: Registration, event: Event) -> str:
         gateway = self._resolve_gateway()
         reference = self._build_payment_reference(gateway, registration.reg_id)
         payment = Payment(
@@ -251,6 +377,21 @@ class RegistrationService:
             registration_id=registration.id,
         )
         await self.repository.create_payment(payment)
+        return self._build_payment_url(gateway, reference)
+
+    async def _create_pending_batch_payment(self, batch_registration: BatchRegistration) -> str:
+        gateway = self._resolve_gateway()
+        reference = self._build_batch_payment_reference(gateway, batch_registration.id)
+        batch_registration.payment_reference = reference
+        payment = Payment(
+            gateway=gateway,
+            payment_reference=reference,
+            amount=batch_registration.total_amount,
+            status=PaymentStatus.PENDING,
+            batch_id=batch_registration.id,
+        )
+        await self.repository.create_payment(payment)
+        await self.session.flush()
         return self._build_payment_url(gateway, reference)
 
     def _resolve_gateway(self) -> PaymentGateway:
@@ -267,6 +408,14 @@ class RegistrationService:
             return f"PAYSTACK_{compact_reg_id}"
         return f"SQUAD_{compact_reg_id}"
 
+    def _build_batch_payment_reference(self, gateway: PaymentGateway, batch_id: str) -> str:
+        compact_batch_id = batch_id.replace("-", "")
+        if gateway == PaymentGateway.MOCK:
+            return f"MOCK_{compact_batch_id}"
+        if gateway == PaymentGateway.PAYSTACK:
+            return f"PAYSTACK_{compact_batch_id}"
+        return f"SQUAD_{compact_batch_id}"
+
     def _build_payment_url(self, gateway: PaymentGateway, reference: str) -> str:
         if gateway == PaymentGateway.MOCK:
             return f"{self.settings.mock_payment_base_url.rstrip('/')}/mock-payment/pay?ref={reference}"
@@ -274,7 +423,7 @@ class RegistrationService:
             return f"{self.settings.paystack_checkout_base_url.rstrip('/')}/{reference.lower()}"
         return f"{self.settings.squad_checkout_base_url.rstrip('/')}/{reference.lower()}"
 
-    def _build_response(
+    def _build_single_response(
         self,
         registration: Registration,
         is_free_event: bool,
@@ -292,6 +441,33 @@ class RegistrationService:
             state=registration.state,
             is_free=is_free_event,
             payment_url=payment_url,
+            message=message,
+        )
+
+    def _build_batch_response(
+        self,
+        *,
+        batch_registration: BatchRegistration,
+        participant_count: int,
+        participants: list[BatchRegistrationParticipantResponse],
+        state: RegistrationState,
+        payment_url: str | None,
+    ) -> BatchRegistrationCreateResponse:
+        if state == RegistrationState.CONFIRMED:
+            message = "Batch registration confirmed. Tickets have been sent to all participants."
+        elif state == RegistrationState.PENDING_PAYMENT:
+            message = "Batch registration created. Complete payment to confirm all spots."
+        else:
+            message = "The event is full. This batch has been added to the waitlist."
+
+        return BatchRegistrationCreateResponse(
+            batch_id=batch_registration.id,
+            total_amount=batch_registration.total_amount,
+            currency="NGN",
+            participant_count=participant_count,
+            state=state,
+            payment_url=payment_url,
+            participants=participants,
             message=message,
         )
 

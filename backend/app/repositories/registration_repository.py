@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.event import Event
 from app.models.payment import Payment
-from app.models.registration import Registration, RegistrationState
+from app.models.registration import BatchRegistration, Registration, RegistrationState
 
 
 CAPACITY_OCCUPYING_STATES = (
@@ -44,6 +44,20 @@ class RegistrationRepository:
         )
         return result.scalar_one_or_none() is not None
 
+    async def existing_emails_for_event(self, event_id: str, emails: list[str]) -> list[str]:
+        if not emails:
+            return []
+        lowered_emails = [email.lower() for email in emails]
+        result = await self.session.execute(
+            select(func.lower(Registration.email))
+            .where(
+                Registration.event_id == event_id,
+                func.lower(Registration.email).in_(lowered_emails),
+            )
+            .distinct()
+        )
+        return sorted(result.scalars().all())
+
     async def reg_id_exists(self, reg_id: str) -> bool:
         result = await self.session.execute(select(Registration.id).where(Registration.reg_id == reg_id))
         return result.scalar_one_or_none() is not None
@@ -70,6 +84,11 @@ class RegistrationRepository:
         self.session.add(registration)
         await self.session.flush()
         return registration
+
+    async def create_batch_registration(self, batch_registration: BatchRegistration) -> BatchRegistration:
+        self.session.add(batch_registration)
+        await self.session.flush()
+        return batch_registration
 
     async def create_payment(self, payment: Payment) -> Payment:
         self.session.add(payment)
