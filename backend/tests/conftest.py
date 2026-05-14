@@ -117,7 +117,7 @@ async def client(async_engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
         app.dependency_overrides.pop(get_db_session, None)
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def captured_email_tasks(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     captured: list[dict] = []
 

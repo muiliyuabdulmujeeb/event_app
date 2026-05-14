@@ -41,6 +41,10 @@ class ConflictError(AppError):
     status_code = 409
 
 
+class BadGatewayError(AppError):
+    status_code = 502
+
+
 class InvalidCredentialsError(AuthenticationError):
     detail = "Invalid email or password."
 
@@ -71,6 +75,14 @@ class RegistrationValidationError(ValidationError):
 
 class RegistrationConflictError(ConflictError):
     pass
+
+
+class PaymentConfigurationError(AppError):
+    detail = "Payment gateway configuration is invalid."
+
+
+class PaymentGatewayError(BadGatewayError):
+    detail = "Payment gateway initialization failed."
 
 
 class DuplicateRegistrationError(RegistrationConflictError):

@@ -21,9 +21,9 @@ from app.core.exceptions import (
     RegistrationValidationError,
 )
 from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
-from app.models.payment import Payment, PaymentGateway, PaymentStatus
 from app.models.registration import BatchRegistration, Registration, RegistrationFieldValue, RegistrationState
 from app.repositories.registration_repository import RegistrationRepository
+from app.services.payment_service import PaymentService
 from app.schemas.registration import (
     BatchParticipantRegistrationInput,
     BatchRegistrationCreateRequest,
@@ -72,6 +72,7 @@ class RegistrationService:
 
     def __post_init__(self) -> None:
         self.repository = RegistrationRepository(self.session)
+        self.payment_service = PaymentService(self.session, self.settings)
 
     async def create_single_registration(
         self,
@@ -106,7 +107,11 @@ class RegistrationService:
         try:
             await self.repository.create_registration(registration)
             if registration_state == RegistrationState.PENDING_PAYMENT:
-                payment_url = await self._create_pending_registration_payment(registration, event)
+                payment_result = await self.payment_service.initialize_registration_payment(
+                    registration=registration,
+                    event=event,
+                )
+                payment_url = payment_result.checkout_url
             await self.session.flush()
         except IntegrityError as exc:
             await self.session.rollback()
@@ -194,7 +199,10 @@ class RegistrationService:
                     ticket_email_payloads.append(self._build_ticket_email_payload(event, registration))
 
             if batch_state == RegistrationState.PENDING_PAYMENT:
-                payment_url = await self._create_pending_batch_payment(batch_registration)
+                payment_result = await self.payment_service.initialize_batch_payment(
+                    batch_registration=batch_registration
+                )
+                payment_url = payment_result.checkout_url
 
             await self.session.flush()
         except IntegrityError as exc:
@@ -365,63 +373,6 @@ class RegistrationService:
             )
             for field_id, value in submitted_values.items()
         ]
-
-    async def _create_pending_registration_payment(self, registration: Registration, event: Event) -> str:
-        gateway = self._resolve_gateway()
-        reference = self._build_payment_reference(gateway, registration.reg_id)
-        payment = Payment(
-            gateway=gateway,
-            payment_reference=reference,
-            amount=event.price,
-            status=PaymentStatus.PENDING,
-            registration_id=registration.id,
-        )
-        await self.repository.create_payment(payment)
-        return self._build_payment_url(gateway, reference)
-
-    async def _create_pending_batch_payment(self, batch_registration: BatchRegistration) -> str:
-        gateway = self._resolve_gateway()
-        reference = self._build_batch_payment_reference(gateway, batch_registration.id)
-        batch_registration.payment_reference = reference
-        payment = Payment(
-            gateway=gateway,
-            payment_reference=reference,
-            amount=batch_registration.total_amount,
-            status=PaymentStatus.PENDING,
-            batch_id=batch_registration.id,
-        )
-        await self.repository.create_payment(payment)
-        await self.session.flush()
-        return self._build_payment_url(gateway, reference)
-
-    def _resolve_gateway(self) -> PaymentGateway:
-        try:
-            return PaymentGateway(self.settings.active_payment_gateway.lower())
-        except ValueError as exc:
-            raise RegistrationConflictError("The active payment gateway is not supported.") from exc
-
-    def _build_payment_reference(self, gateway: PaymentGateway, reg_id: str) -> str:
-        compact_reg_id = reg_id.replace("-", "")
-        if gateway == PaymentGateway.MOCK:
-            return f"MOCK_{compact_reg_id}"
-        if gateway == PaymentGateway.PAYSTACK:
-            return f"PAYSTACK_{compact_reg_id}"
-        return f"SQUAD_{compact_reg_id}"
-
-    def _build_batch_payment_reference(self, gateway: PaymentGateway, batch_id: str) -> str:
-        compact_batch_id = batch_id.replace("-", "")
-        if gateway == PaymentGateway.MOCK:
-            return f"MOCK_{compact_batch_id}"
-        if gateway == PaymentGateway.PAYSTACK:
-            return f"PAYSTACK_{compact_batch_id}"
-        return f"SQUAD_{compact_batch_id}"
-
-    def _build_payment_url(self, gateway: PaymentGateway, reference: str) -> str:
-        if gateway == PaymentGateway.MOCK:
-            return f"{self.settings.mock_payment_base_url.rstrip('/')}/mock-payment/pay?ref={reference}"
-        if gateway == PaymentGateway.PAYSTACK:
-            return f"{self.settings.paystack_checkout_base_url.rstrip('/')}/{reference.lower()}"
-        return f"{self.settings.squad_checkout_base_url.rstrip('/')}/{reference.lower()}"
 
     def _build_single_response(
         self,
