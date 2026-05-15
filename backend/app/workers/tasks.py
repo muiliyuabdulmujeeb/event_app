@@ -21,6 +21,12 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    beat_schedule={
+        "expire-stale-payments": {
+            "task": "app.workers.payment_tasks.expire_stale_payments",
+            "schedule": 300.0,
+        }
+    },
 )
 
 

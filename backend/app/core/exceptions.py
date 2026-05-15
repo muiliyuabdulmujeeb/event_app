@@ -45,6 +45,10 @@ class BadGatewayError(AppError):
     status_code = 502
 
 
+class BadRequestError(AppError):
+    status_code = 400
+
+
 class InvalidCredentialsError(AuthenticationError):
     detail = "Invalid email or password."
 
@@ -83,6 +87,14 @@ class PaymentConfigurationError(AppError):
 
 class PaymentGatewayError(BadGatewayError):
     detail = "Payment gateway initialization failed."
+
+
+class PaymentNotFoundError(NotFoundError):
+    detail = "Payment not found."
+
+
+class InvalidWebhookSignatureError(BadRequestError):
+    detail = "Webhook signature is invalid."
 
 
 class DuplicateRegistrationError(RegistrationConflictError):

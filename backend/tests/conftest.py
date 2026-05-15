@@ -35,11 +35,12 @@ os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
 
 from app.core.config import get_settings
 from app.core.security import hash_password
-from app.core.dependencies import get_db_session
+from app.core.dependencies import get_app_settings, get_db_session
 import app.models  # noqa: F401
 from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
 from app.models.staff import StaffAccessMode, StaffAccessModeRecord, StaffAccount, StaffRole
 from app.workers.email_tasks import send_email_task
+from app.workers.payment_tasks import process_payment_webhook_task
 
 get_settings.cache_clear()
 
@@ -127,6 +128,29 @@ def captured_email_tasks(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
 
     monkeypatch.setattr(send_email_task, "delay", fake_delay)
     return captured
+
+
+@pytest.fixture(autouse=True)
+def captured_payment_tasks(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
+    captured: list[dict] = []
+
+    def fake_delay(payload: dict) -> dict:
+        captured.append(payload)
+        return payload
+
+    monkeypatch.setattr(process_payment_webhook_task, "delay", fake_delay)
+    return captured
+
+
+@pytest.fixture
+def override_app_settings() -> Iterator[callable]:
+    def apply_override(settings):
+        app.dependency_overrides[get_app_settings] = lambda: settings
+
+    try:
+        yield apply_override
+    finally:
+        app.dependency_overrides.pop(get_app_settings, None)
 
 
 @pytest_asyncio.fixture
