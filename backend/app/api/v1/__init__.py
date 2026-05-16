@@ -8,11 +8,13 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.public.events import router as public_events_router
 from app.api.v1.public.registrations import router as public_registrations_router
+from app.api.v1.staff import router as staff_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router)
 api_router.include_router(admin_staff_router)
 api_router.include_router(admin_events_router)
 api_router.include_router(payments_router)
+api_router.include_router(staff_router)
 api_router.include_router(public_events_router)
 api_router.include_router(public_registrations_router)

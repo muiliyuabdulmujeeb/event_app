@@ -81,6 +81,10 @@ class RegistrationConflictError(ConflictError):
     pass
 
 
+class RegistrationNotFoundError(NotFoundError):
+    detail = "Registration not found."
+
+
 class PaymentConfigurationError(AppError):
     detail = "Payment gateway configuration is invalid."
 
@@ -99,6 +103,26 @@ class EmailDeliveryError(BadGatewayError):
 
 class PaymentNotFoundError(NotFoundError):
     detail = "Payment not found."
+
+
+class StaffAccountNotFoundError(NotFoundError):
+    detail = "Staff account not found."
+
+
+class StaffNotificationNotFoundError(NotFoundError):
+    detail = "Staff notification not found."
+
+
+class StaffOperationValidationError(ValidationError):
+    pass
+
+
+class StaffOperationConflictError(ConflictError):
+    pass
+
+
+class StaffAccessForbiddenError(AuthorizationError):
+    detail = "You do not have access to registrations for this event."
 
 
 class InvalidWebhookSignatureError(BadRequestError):
