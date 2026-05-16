@@ -23,6 +23,7 @@ from app.core.exceptions import (
 from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
 from app.models.registration import BatchRegistration, Registration, RegistrationFieldValue, RegistrationState
 from app.repositories.registration_repository import RegistrationRepository
+from app.services.email_templates import build_ticket_email_message
 from app.services.payment_service import PaymentService
 from app.schemas.registration import (
     BatchParticipantRegistrationInput,
@@ -118,12 +119,12 @@ class RegistrationService:
             raise EventConflictError("The registration could not be saved because it conflicts with existing data.") from exc
 
         response = self._build_single_response(registration, event.is_free, payment_url)
-        ticket_email_payload = (
-            self._build_ticket_email_payload(event, registration)
+        ticket_email_message = (
+            build_ticket_email_message(self.settings, event=event, registration=registration)
             if registration_state == RegistrationState.CONFIRMED
             else None
         )
-        return RegistrationServiceResult(response=response, ticket_email_payload=ticket_email_payload)
+        return RegistrationServiceResult(response=response, ticket_email_message=ticket_email_message)
 
     async def create_batch_registration(
         self,
@@ -154,7 +155,7 @@ class RegistrationService:
         )
 
         participant_responses: list[BatchRegistrationParticipantResponse] = []
-        ticket_email_payloads: list[dict] = []
+        ticket_email_messages = []
         payment_url: str | None = None
 
         try:
@@ -196,7 +197,9 @@ class RegistrationService:
                     )
                 )
                 if batch_state == RegistrationState.CONFIRMED:
-                    ticket_email_payloads.append(self._build_ticket_email_payload(event, registration))
+                    ticket_email_messages.append(
+                        build_ticket_email_message(self.settings, event=event, registration=registration)
+                    )
 
             if batch_state == RegistrationState.PENDING_PAYMENT:
                 payment_result = await self.payment_service.initialize_batch_payment(
@@ -216,7 +219,7 @@ class RegistrationService:
             state=batch_state,
             payment_url=payment_url,
         )
-        return BatchRegistrationServiceResult(response=response, ticket_email_payloads=ticket_email_payloads)
+        return BatchRegistrationServiceResult(response=response, ticket_email_messages=ticket_email_messages)
 
     def validate_state_transition(
         self,
@@ -421,18 +424,3 @@ class RegistrationService:
             participants=participants,
             message=message,
         )
-
-    def _build_ticket_email_payload(self, event: Event, registration: Registration) -> dict:
-        return {
-            "to": registration.email,
-            "subject": f"Your ticket for {event.title}",
-            "template": "ticket_confirmation",
-            "context": {
-                "reg_id": registration.reg_id,
-                "event_title": event.title,
-                "event_date": event.event_date.isoformat(),
-                "location": event.location,
-                "first_name": registration.first_name,
-                "last_name": registration.last_name,
-            },
-        }

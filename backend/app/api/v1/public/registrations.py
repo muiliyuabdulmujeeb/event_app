@@ -14,8 +14,8 @@ from app.schemas.registration import (
     RegistrationCreateRequest,
     RegistrationCreateResponse,
 )
+from app.services.email_service import EmailService
 from app.services.registration_service import RegistrationService
-from app.workers.email_tasks import send_email_task
 
 router = APIRouter(tags=["public-registrations"])
 
@@ -36,11 +36,12 @@ async def create_single_registration(
     settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> RegistrationCreateResponse:
     service = RegistrationService(session=session, settings=settings)
+    email_service = EmailService(settings=settings)
     try:
         result = await service.create_single_registration(event_id=event_id, payload=payload)
         await _commit_or_rollback(session)
-        if result.ticket_email_payload is not None:
-            send_email_task.delay(result.ticket_email_payload)
+        if result.ticket_email_message is not None:
+            email_service.enqueue_message(result.ticket_email_message)
         return result.response
     except AppError as exc:
         await session.rollback()
@@ -57,11 +58,11 @@ async def create_batch_registration(
     settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> BatchRegistrationCreateResponse:
     service = RegistrationService(session=session, settings=settings)
+    email_service = EmailService(settings=settings)
     try:
         result = await service.create_batch_registration(event_id=event_id, payload=payload)
         await _commit_or_rollback(session)
-        for email_payload in result.ticket_email_payloads:
-            send_email_task.delay(email_payload)
+        email_service.enqueue_messages(result.ticket_email_messages)
         return result.response
     except AppError as exc:
         await session.rollback()

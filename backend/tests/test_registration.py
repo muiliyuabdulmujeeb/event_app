@@ -128,7 +128,8 @@ async def test_free_event_registration_is_immediately_confirmed(
     assert body["payment_url"] is None
     assert body["message"] == "Registration confirmed. A ticket has been sent to amina.bello@example.com."
     assert REG_ID_PATTERN.fullmatch(body["reg_id"])
-    assert captured_email_tasks and captured_email_tasks[0]["to"] == "amina.bello@example.com"
+    assert captured_email_tasks and captured_email_tasks[0]["to"] == ["amina.bello@example.com"]
+    assert captured_email_tasks[0]["subject"] == "Your ticket for Community Meetup 2026"
 
     registration = (
         await db_session.execute(
@@ -688,6 +689,12 @@ async def test_free_batch_registration_is_immediately_confirmed(
     assert len({participant["reg_id"] for participant in body["participants"]}) == 4
     assert all(REG_ID_PATTERN.fullmatch(participant["reg_id"]) for participant in body["participants"])
     assert len(captured_email_tasks) == 4
+    assert {payload["to"][0] for payload in captured_email_tasks} == {
+        "ngozi@example.com",
+        "emeka@example.com",
+        "fatima@example.com",
+        "chinedu@example.com",
+    }
 
     registrations = (await db_session.execute(select(Registration))).scalars().all()
     assert len(registrations) == 4

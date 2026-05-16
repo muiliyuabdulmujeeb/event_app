@@ -25,6 +25,22 @@ class Settings(BaseSettings):
     email_provider: str = Field("console", alias="EMAIL_PROVIDER")
     email_api_key: str = Field("", alias="EMAIL_API_KEY")
     email_from: str = Field("noreply@eventapp.local", alias="EMAIL_FROM")
+    email_from_name: str = Field("Event Management", alias="EMAIL_FROM_NAME")
+    resend_api_key: str = Field("", alias="RESEND_API_KEY")
+    resend_api_base_url: str = Field("https://api.resend.com", alias="RESEND_API_BASE_URL")
+    sendgrid_api_key: str = Field("", alias="SENDGRID_API_KEY")
+    sendgrid_api_base_url: str = Field("https://api.sendgrid.com", alias="SENDGRID_API_BASE_URL")
+    mailgun_api_key: str = Field("", alias="MAILGUN_API_KEY")
+    mailgun_domain: str = Field("", alias="MAILGUN_DOMAIN")
+    mailgun_api_base_url: str = Field("https://api.mailgun.net", alias="MAILGUN_API_BASE_URL")
+    zoho_mail_access_token: str = Field("", alias="ZOHO_MAIL_ACCESS_TOKEN")
+    zoho_mail_account_id: str = Field("", alias="ZOHO_MAIL_ACCOUNT_ID")
+    zoho_mail_api_base_url: str = Field("https://mail.zoho.com", alias="ZOHO_MAIL_API_BASE_URL")
+    aws_ses_region: str = Field("", alias="AWS_SES_REGION")
+    aws_ses_access_key_id: str = Field("", alias="AWS_SES_ACCESS_KEY_ID")
+    aws_ses_secret_access_key: str = Field("", alias="AWS_SES_SECRET_ACCESS_KEY")
+    aws_ses_session_token: str = Field("", alias="AWS_SES_SESSION_TOKEN")
+    aws_ses_endpoint_url: str = Field("", alias="AWS_SES_ENDPOINT_URL")
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -11,6 +11,8 @@ from app.core.security import utc_now
 from app.models.payment import Payment, PaymentStatus
 from app.models.registration import Registration, RegistrationState
 from app.repositories.payment_repository import PaymentRepository
+from app.schemas.email import EmailMessage
+from app.services.email_templates import build_ticket_email_message
 
 
 PAYMENT_SUCCESS_EVENT = "payment.success"
@@ -24,6 +26,7 @@ class PaymentProcessingResult:
     status: PaymentStatus
     processed: bool
     registration_ids: list[str]
+    ticket_email_messages: list[EmailMessage]
 
 
 @dataclass
@@ -52,6 +55,7 @@ class PaymentProcessingService:
                 status=payment.status,
                 processed=False,
                 registration_ids=self._collect_registration_ids(payment),
+                ticket_email_messages=[],
             )
 
         if payment.status == PaymentStatus.FAILED and event_type == PAYMENT_FAILED_EVENT:
@@ -61,6 +65,7 @@ class PaymentProcessingService:
                 status=payment.status,
                 processed=False,
                 registration_ids=self._collect_registration_ids(payment),
+                ticket_email_messages=[],
             )
 
         if payment.status == PaymentStatus.FAILED and event_type == PAYMENT_SUCCESS_EVENT:
@@ -70,6 +75,7 @@ class PaymentProcessingService:
                 status=payment.status,
                 processed=False,
                 registration_ids=self._collect_registration_ids(payment),
+                ticket_email_messages=[],
             )
 
         if event_type == PAYMENT_SUCCESS_EVENT:
@@ -83,6 +89,7 @@ class PaymentProcessingService:
             status=payment.status,
             processed=False,
             registration_ids=self._collect_registration_ids(payment),
+            ticket_email_messages=[],
         )
 
     async def expire_stale_payments(self) -> list[PaymentProcessingResult]:
@@ -107,12 +114,17 @@ class PaymentProcessingService:
             registration.state = RegistrationState.CONFIRMED
 
         await self.session.flush()
+        ticket_email_messages = [
+            build_ticket_email_message(self.settings, event=registration.event, registration=registration)
+            for registration in affected_registrations
+        ]
         return PaymentProcessingResult(
             reference=payment.payment_reference,
             event_type=PAYMENT_SUCCESS_EVENT,
             status=payment.status,
             processed=True,
             registration_ids=[registration.id for registration in affected_registrations],
+            ticket_email_messages=ticket_email_messages,
         )
 
     async def _mark_failed(self, payment: Payment) -> PaymentProcessingResult:
@@ -130,6 +142,7 @@ class PaymentProcessingService:
             status=payment.status,
             processed=True,
             registration_ids=[registration.id for registration in affected_registrations],
+            ticket_email_messages=[],
         )
 
     def _pending_owner_registrations(self, payment: Payment) -> list[Registration]:

@@ -5,6 +5,7 @@ from datetime import datetime
 
 from app.core.config import get_settings
 from app.db.session import create_engine_from_url, create_session_factory
+from app.services.email_service import EmailService
 from app.services.payment_processing_service import PaymentProcessingService
 from app.workers.tasks import celery_app
 
@@ -24,13 +25,15 @@ async def _process_payment_webhook(payload: dict) -> dict:
     session_factory = create_session_factory(engine)
     async with session_factory() as session:
         try:
-            service = PaymentProcessingService(session=session, settings=get_settings())
+            settings = get_settings()
+            service = PaymentProcessingService(session=session, settings=settings)
             result = await service.process_event(
                 event_type=str(payload["event_type"]),
                 reference=str(payload["reference"]),
                 paid_at=_parse_datetime(payload.get("paid_at")),
             )
             await session.commit()
+            EmailService(settings=settings).enqueue_messages(result.ticket_email_messages)
             return {
                 "reference": result.reference,
                 "event_type": result.event_type,

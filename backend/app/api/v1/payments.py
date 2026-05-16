@@ -16,6 +16,7 @@ from app.core.exceptions import (
     InvalidWebhookSignatureError,
     as_http_exception,
 )
+from app.services.email_service import EmailService
 from app.services.payment_processing_service import (
     PAYMENT_FAILED_EVENT,
     PAYMENT_SUCCESS_EVENT,
@@ -83,13 +84,15 @@ async def mock_confirm_payment(
     settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> dict[str, str]:
     service = PaymentProcessingService(session=session, settings=settings)
+    email_service = EmailService(settings=settings)
     try:
-        await service.process_event(
+        result = await service.process_event(
             event_type=PAYMENT_SUCCESS_EVENT,
             reference=reference,
             paid_at=utc_now(),
         )
         await _commit_or_rollback(session)
+        email_service.enqueue_messages(result.ticket_email_messages)
         return {"status": "processed"}
     except AppError as exc:
         await session.rollback()

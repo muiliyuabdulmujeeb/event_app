@@ -5,6 +5,7 @@ import re
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.registration import RegistrationState
+from app.schemas.email import EmailMessage
 
 
 class RegistrationCustomFieldValueInput(BaseModel):
@@ -118,13 +119,13 @@ class BatchRegistrationCreateResponse(BaseModel):
 
 class RegistrationServiceResult(BaseModel):
     response: RegistrationCreateResponse
-    ticket_email_payload: dict | None = None
+    ticket_email_message: EmailMessage | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class BatchRegistrationServiceResult(BaseModel):
     response: BatchRegistrationCreateResponse
-    ticket_email_payloads: list[dict] = Field(default_factory=list)
+    ticket_email_messages: list[EmailMessage] = Field(default_factory=list)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)

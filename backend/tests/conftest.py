@@ -30,6 +30,7 @@ os.environ.setdefault("JWT_SECRET", "changeme")
 os.environ.setdefault("JWT_ACCESS_EXPIRY_HOURS", "1")
 os.environ.setdefault("JWT_REFRESH_EXPIRY_DAYS", "7")
 os.environ.setdefault("EMAIL_PROVIDER", "mock")
+os.environ.setdefault("EMAIL_FROM_NAME", "Event Management")
 
 os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
 
@@ -39,6 +40,7 @@ from app.core.dependencies import get_app_settings, get_db_session
 import app.models  # noqa: F401
 from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
 from app.models.staff import StaffAccessMode, StaffAccessModeRecord, StaffAccount, StaffRole
+from app.services.email_providers.mock_provider import clear_mock_outbox
 from app.workers.email_tasks import send_email_task
 from app.workers.payment_tasks import process_payment_webhook_task
 
@@ -121,13 +123,17 @@ async def client(async_engine: AsyncEngine) -> AsyncIterator[AsyncClient]:
 @pytest.fixture(autouse=True)
 def captured_email_tasks(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     captured: list[dict] = []
+    clear_mock_outbox()
 
     def fake_delay(payload: dict) -> dict:
         captured.append(payload)
         return payload
 
     monkeypatch.setattr(send_email_task, "delay", fake_delay)
-    return captured
+    try:
+        yield captured
+    finally:
+        clear_mock_outbox()
 
 
 @pytest.fixture(autouse=True)

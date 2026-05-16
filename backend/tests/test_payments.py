@@ -139,6 +139,7 @@ async def test_mock_confirm_transitions_single_registration_to_confirmed(
     client,
     db_session,
     seeded_admin_account: StaffAccount,
+    captured_email_tasks: list[dict],
 ) -> None:
     event = await create_event(
         db_session,
@@ -149,6 +150,8 @@ async def test_mock_confirm_transitions_single_registration_to_confirmed(
         capacity=10,
         overflow_rule=OverflowRule.HARD_REJECTION,
     )
+    event_id = event.id
+    formatted_event_date = event.event_date.astimezone().strftime("%Y-%m-%d %H:%M %Z")
     _, payment = await create_paid_single_registration(client, db_session, event)
 
     response = await client.post(f"/mock-payment/confirm/{payment.payment_reference}")
@@ -163,6 +166,43 @@ async def test_mock_confirm_transitions_single_registration_to_confirmed(
     assert payment.status == PaymentStatus.SUCCESSFUL
     assert payment.paid_at is not None
     assert registration.state == RegistrationState.CONFIRMED
+    assert captured_email_tasks == [
+        {
+            "from_email": "noreply@eventapp.local",
+            "from_name": "Event Management",
+            "to": ["chidi@example.com"],
+            "subject": "Your ticket for Paid Confirm Event",
+                "text_body": (
+                    "Hello Chidi Okonkwo,\n\n"
+                    "Your registration has been confirmed. Here are your ticket details:\n"
+                    "Event: Paid Confirm Event\n"
+                    f"Date: {formatted_event_date}\n"
+                    "Location: Lagos, Nigeria\n"
+                    f"Registration ID: {registration.reg_id}\n\n"
+                    "Please keep this email for your records."
+                ),
+            "html_body": (
+                    "<p>Hello Chidi Okonkwo,</p>"
+                    "<p>Your registration has been confirmed. Here are your ticket details:</p>"
+                    "<ul>"
+                    "<li><strong>Event:</strong> Paid Confirm Event</li>"
+                    f"<li><strong>Date:</strong> {formatted_event_date}</li>"
+                    "<li><strong>Location:</strong> Lagos, Nigeria</li>"
+                    f"<li><strong>Registration ID:</strong> {registration.reg_id}</li>"
+                    "</ul>"
+                "<p>Please keep this email for your records.</p>"
+            ),
+            "cc": [],
+            "bcc": [],
+            "reply_to": None,
+            "headers": {},
+                "metadata": {
+                    "template": "ticket_confirmation",
+                    "reg_id": registration.reg_id,
+                    "event_id": event_id,
+                },
+            }
+        ]
 
 
 @pytest.mark.asyncio
@@ -170,6 +210,7 @@ async def test_mock_fail_transitions_single_registration_to_failed_and_releases_
     client,
     db_session,
     seeded_admin_account: StaffAccount,
+    captured_email_tasks: list[dict],
 ) -> None:
     event = await create_event(
         db_session,
@@ -192,6 +233,7 @@ async def test_mock_fail_transitions_single_registration_to_failed_and_releases_
     failed_registration = (await db_session.execute(select(Registration))).scalar_one()
     assert payment.status == PaymentStatus.FAILED
     assert failed_registration.state == RegistrationState.FAILED
+    assert captured_email_tasks == []
 
     retry_response = await client.post(
         f"/register/{event_id}",
@@ -212,6 +254,7 @@ async def test_mock_confirm_transitions_paid_batch_to_confirmed(
     client,
     db_session,
     seeded_admin_account: StaffAccount,
+    captured_email_tasks: list[dict],
 ) -> None:
     event = await create_event(
         db_session,
@@ -238,6 +281,13 @@ async def test_mock_confirm_transitions_paid_batch_to_confirmed(
     assert payment.paid_at is not None
     assert len(registrations) == 4
     assert all(registration.state == RegistrationState.CONFIRMED for registration in registrations)
+    assert len(captured_email_tasks) == 4
+    assert {payload["to"][0] for payload in captured_email_tasks} == {
+        "ngozi@example.com",
+        "emeka@example.com",
+        "fatima@example.com",
+        "chinedu@example.com",
+    }
 
 
 @pytest.mark.asyncio
@@ -245,6 +295,7 @@ async def test_mock_fail_transitions_paid_batch_to_failed_and_releases_capacity(
     client,
     db_session,
     seeded_admin_account: StaffAccount,
+    captured_email_tasks: list[dict],
 ) -> None:
     event = await create_event(
         db_session,
@@ -270,6 +321,7 @@ async def test_mock_fail_transitions_paid_batch_to_failed_and_releases_capacity(
     registrations = (await db_session.execute(select(Registration))).scalars().all()
     assert payment.status == PaymentStatus.FAILED
     assert all(registration.state == RegistrationState.FAILED for registration in registrations)
+    assert captured_email_tasks == []
 
     retry_response = await client.post(
         f"/register/{event_id}",
@@ -533,6 +585,8 @@ async def test_payment_processing_service_is_idempotent_for_duplicate_success_we
     assert payment.status == PaymentStatus.SUCCESSFUL
     assert payment.paid_at == paid_at
     assert registration.state == RegistrationState.CONFIRMED
+    assert len(first.ticket_email_messages) == 1
+    assert second.ticket_email_messages == []
 
 
 @pytest.mark.asyncio
@@ -571,6 +625,8 @@ async def test_payment_processing_service_is_idempotent_for_duplicate_failed_web
     assert payment.status == PaymentStatus.FAILED
     assert payment.paid_at is None
     assert registration.state == RegistrationState.FAILED
+    assert first.ticket_email_messages == []
+    assert second.ticket_email_messages == []
 
 
 @pytest.mark.asyncio
@@ -609,6 +665,8 @@ async def test_payment_processing_service_does_not_revive_failed_payment_on_late
     assert payment.status == PaymentStatus.FAILED
     assert payment.paid_at is None
     assert registration.state == RegistrationState.FAILED
+    assert failed.ticket_email_messages == []
+    assert late_success.ticket_email_messages == []
 
 
 @pytest.mark.asyncio
@@ -616,6 +674,7 @@ async def test_process_payment_webhook_task_confirms_batch_end_to_end(
     client,
     db_session,
     seeded_admin_account: StaffAccount,
+    captured_email_tasks: list[dict],
 ) -> None:
     event = await create_event(
         db_session,
@@ -646,6 +705,7 @@ async def test_process_payment_webhook_task_confirms_batch_end_to_end(
     assert payment.status == PaymentStatus.SUCCESSFUL
     assert len(registrations) == 4
     assert all(registration.state == RegistrationState.CONFIRMED for registration in registrations)
+    assert len(captured_email_tasks) == 4
 
 
 @pytest.mark.asyncio
@@ -653,6 +713,7 @@ async def test_expire_stale_payments_marks_pending_single_and_batch_failed(
     client,
     db_session,
     seeded_admin_account: StaffAccount,
+    captured_email_tasks: list[dict],
 ) -> None:
     single_event = await create_event(
         db_session,
@@ -698,3 +759,4 @@ async def test_expire_stale_payments_marks_pending_single_and_batch_failed(
     assert len(results) == 2
     assert all(payment.status == PaymentStatus.FAILED for payment in payments)
     assert all(registration.state == RegistrationState.FAILED for registration in registrations)
+    assert captured_email_tasks == []

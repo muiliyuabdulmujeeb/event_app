@@ -89,6 +89,14 @@ class PaymentGatewayError(BadGatewayError):
     detail = "Payment gateway initialization failed."
 
 
+class EmailConfigurationError(AppError):
+    detail = "Email provider configuration is invalid."
+
+
+class EmailDeliveryError(BadGatewayError):
+    detail = "Email delivery failed."
+
+
 class PaymentNotFoundError(NotFoundError):
     detail = "Payment not found."
 
