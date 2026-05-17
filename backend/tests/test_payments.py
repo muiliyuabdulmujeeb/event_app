@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import Settings
 from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
+from app.models.notification import StaffNotification
 from app.models.payment import Payment, PaymentStatus
 from app.models.registration import BatchRegistration, Registration, RegistrationState
 from app.models.staff import StaffAccount
@@ -634,6 +635,7 @@ async def test_payment_processing_service_does_not_revive_failed_payment_on_late
     client,
     db_session,
     seeded_admin_account: StaffAccount,
+    seeded_staff_account: StaffAccount,
 ) -> None:
     event = await create_event(
         db_session,
@@ -660,13 +662,20 @@ async def test_payment_processing_service_does_not_revive_failed_payment_on_late
 
     payment = (await db_session.execute(select(Payment))).scalar_one()
     registration = (await db_session.execute(select(Registration))).scalar_one()
+    staff_notifications = (await db_session.execute(select(StaffNotification))).scalars().all()
     assert failed.processed is True
-    assert late_success.processed is False
-    assert payment.status == PaymentStatus.FAILED
-    assert payment.paid_at is None
+    assert late_success.processed is True
+    assert payment.status == PaymentStatus.SUCCESSFUL
+    assert payment.paid_at == datetime(2026, 5, 14, 15, 0, tzinfo=timezone.utc)
     assert registration.state == RegistrationState.FAILED
     assert failed.ticket_email_messages == []
     assert late_success.ticket_email_messages == []
+    assert len(staff_notifications) == 2
+    assert {notification.staff_id for notification in staff_notifications} == {
+        seeded_admin_account.id,
+        seeded_staff_account.id,
+    }
+    assert all(notification.title == "Manual Payment Review Required" for notification in staff_notifications)
 
 
 @pytest.mark.asyncio

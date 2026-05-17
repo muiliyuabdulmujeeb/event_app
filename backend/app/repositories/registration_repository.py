@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from sqlalchemy import func, select
@@ -8,13 +9,12 @@ from sqlalchemy.orm import selectinload
 
 from app.models.event import Event
 from app.models.payment import Payment
-from app.models.registration import BatchRegistration, Registration, RegistrationState
+from app.models.registration import BatchRegistration, Registration, RegistrationFieldValue, RegistrationState
 
 
 CAPACITY_OCCUPYING_STATES = (
     RegistrationState.PENDING_PAYMENT,
     RegistrationState.CONFIRMED,
-    RegistrationState.REFUND_REQUESTED,
 )
 
 
@@ -31,6 +31,15 @@ class RegistrationRepository:
         result = await self.session.execute(
             select(Event)
             .where(Event.id == event_id)
+            .options(selectinload(Event.field_definitions))
+        )
+        return result.scalar_one_or_none()
+
+    async def lock_event(self, event_id: str) -> Event | None:
+        result = await self.session.execute(
+            select(Event)
+            .where(Event.id == event_id)
+            .with_for_update()
             .options(selectinload(Event.field_definitions))
         )
         return result.scalar_one_or_none()
@@ -94,3 +103,72 @@ class RegistrationRepository:
         self.session.add(payment)
         await self.session.flush()
         return payment
+
+    async def get_registration_by_reg_id(
+        self,
+        reg_id: str,
+        *,
+        for_update: bool = False,
+    ) -> Registration | None:
+        query = (
+            select(Registration)
+            .where(Registration.reg_id == reg_id)
+            .options(
+                selectinload(Registration.event).selectinload(Event.field_definitions),
+                selectinload(Registration.payment),
+                selectinload(Registration.field_values).selectinload(RegistrationFieldValue.field_definition),
+                selectinload(Registration.user_notifications),
+            )
+        )
+        if for_update:
+            query = query.with_for_update()
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def list_registrations_for_event(
+        self,
+        event_id: str,
+        *,
+        states: Sequence[RegistrationState] | None = None,
+        for_update: bool = False,
+    ) -> list[Registration]:
+        query = (
+            select(Registration)
+            .where(Registration.event_id == event_id)
+            .order_by(Registration.registered_at.asc(), Registration.reg_id.asc())
+            .options(
+                selectinload(Registration.event).selectinload(Event.field_definitions),
+                selectinload(Registration.payment),
+                selectinload(Registration.field_values).selectinload(RegistrationFieldValue.field_definition),
+            )
+        )
+        if states is not None:
+            query = query.where(Registration.state.in_(list(states)))
+        if for_update:
+            query = query.with_for_update()
+        result = await self.session.execute(query)
+        return list(result.scalars().unique().all())
+
+    async def get_next_waitlisted_registration(
+        self,
+        event_id: str,
+        *,
+        for_update: bool = False,
+    ) -> Registration | None:
+        query = (
+            select(Registration)
+            .where(
+                Registration.event_id == event_id,
+                Registration.state == RegistrationState.WAITLISTED,
+            )
+            .order_by(Registration.waitlist_position.asc(), Registration.registered_at.asc(), Registration.reg_id.asc())
+            .options(
+                selectinload(Registration.event).selectinload(Event.field_definitions),
+                selectinload(Registration.payment),
+                selectinload(Registration.field_values).selectinload(RegistrationFieldValue.field_definition),
+            )
+        )
+        if for_update:
+            query = query.with_for_update()
+        result = await self.session.execute(query.limit(1))
+        return result.scalar_one_or_none()

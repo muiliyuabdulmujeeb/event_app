@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic_core import PydanticCustomError
 
 from app.models.event import EventState, FieldType, OverflowRule
+from app.schemas.notification import NotificationMethod, PriceChangeScope
 
 
 PREFIX_PATTERN = r"^[A-Z0-9]{2,5}$"
@@ -79,6 +80,9 @@ class EventUpdateRequest(BaseModel):
     capacity: int | None = Field(default=None, gt=0)
     overflow_rule: OverflowRule | None = None
     custom_fields: list[EventCustomFieldInput] | None = None
+    price_change_scope: PriceChangeScope | None = None
+    notification_method: NotificationMethod | None = None
+    notification_body: str | None = None
 
     @field_validator("title", "description", "location")
     @classmethod
@@ -99,18 +103,67 @@ class EventUpdateRequest(BaseModel):
             raise PydanticCustomError("value_error", PREFIX_ERROR_MESSAGE)
         return value
 
+    @field_validator("notification_body")
+    @classmethod
+    def strip_notification_body(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be empty")
+        return stripped
+
     @model_validator(mode="after")
     def validate_custom_field_order(self) -> Self:
         if self.custom_fields is None:
-            return self
-        display_orders = [field.display_order for field in self.custom_fields]
-        if len(display_orders) != len(set(display_orders)):
+            display_orders: list[int] = []
+        else:
+            display_orders = [field.display_order for field in self.custom_fields]
+        if display_orders and len(display_orders) != len(set(display_orders)):
             raise PydanticCustomError("value_error", "custom_fields display_order values must be unique")
+
+        if self.price_change_scope is not None and self.price is None:
+            raise ValueError("price_change_scope can only be used when price is being updated")
+        if self.price_change_scope == PriceChangeScope.ALL_EXISTING_CONFIRMED:
+            if self.notification_method is None:
+                raise ValueError("notification_method is required when applying a price change to existing confirmed registrations")
+            if self.notification_body is None:
+                raise ValueError("notification_body is required when applying a price change to existing confirmed registrations")
+        if self.price_change_scope == PriceChangeScope.NEW_REGISTRATIONS_ONLY and (
+            self.notification_method is not None or self.notification_body is not None
+        ):
+            raise ValueError("notification settings are not allowed when price_change_scope is new_registrations_only")
+        if self.price_change_scope is None and (
+            self.notification_method is not None or self.notification_body is not None
+        ):
+            raise ValueError("notification settings require price_change_scope")
         return self
 
 
 class EventStateUpdateRequest(BaseModel):
     state: EventState
+    notification_method: NotificationMethod | None = None
+    notification_body: str | None = None
+
+    @field_validator("notification_body")
+    @classmethod
+    def strip_optional_notification_body(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be empty")
+        return stripped
+
+    @model_validator(mode="after")
+    def validate_cancellation_notification(self) -> Self:
+        if self.state == EventState.CANCELLED and self.notification_body is None:
+            raise ValueError("notification_body is required when cancelling an event")
+        if self.state != EventState.CANCELLED and (
+            self.notification_method is not None or self.notification_body is not None
+        ):
+            raise ValueError("notification settings are only allowed when cancelling an event")
+        return self
 
 
 class PublicEventSummaryResponse(BaseModel):

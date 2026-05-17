@@ -13,6 +13,7 @@ from app.models.registration import Registration, RegistrationState
 from app.repositories.payment_repository import PaymentRepository
 from app.schemas.email import EmailMessage
 from app.services.email_templates import build_ticket_email_message
+from app.services.notification_service import NotificationService
 
 
 PAYMENT_SUCCESS_EVENT = "payment.success"
@@ -36,6 +37,7 @@ class PaymentProcessingService:
 
     def __post_init__(self) -> None:
         self.repository = PaymentRepository(self.session)
+        self.notification_service = NotificationService(self.session, self.settings)
 
     async def process_event(
         self,
@@ -69,14 +71,7 @@ class PaymentProcessingService:
             )
 
         if payment.status == PaymentStatus.FAILED and event_type == PAYMENT_SUCCESS_EVENT:
-            return PaymentProcessingResult(
-                reference=reference,
-                event_type=event_type,
-                status=payment.status,
-                processed=False,
-                registration_ids=self._collect_registration_ids(payment),
-                ticket_email_messages=[],
-            )
+            return await self._mark_successful_for_manual_review(payment, paid_at=paid_at or utc_now())
 
         if event_type == PAYMENT_SUCCESS_EVENT:
             return await self._mark_successful(payment, paid_at=paid_at or utc_now())
@@ -106,6 +101,9 @@ class PaymentProcessingService:
         *,
         paid_at: datetime,
     ) -> PaymentProcessingResult:
+        if not self._pending_owner_registrations(payment):
+            return await self._mark_successful_for_manual_review(payment, paid_at=paid_at)
+
         payment.status = PaymentStatus.SUCCESSFUL
         payment.paid_at = paid_at
 
@@ -125,6 +123,28 @@ class PaymentProcessingService:
             processed=True,
             registration_ids=[registration.id for registration in affected_registrations],
             ticket_email_messages=ticket_email_messages,
+        )
+
+    async def _mark_successful_for_manual_review(
+        self,
+        payment: Payment,
+        *,
+        paid_at: datetime,
+    ) -> PaymentProcessingResult:
+        payment.status = PaymentStatus.SUCCESSFUL
+        payment.paid_at = paid_at
+        await self.notification_service.notify_manual_payment_review(
+            payment=payment,
+            paid_at=paid_at.isoformat(),
+        )
+        await self.session.flush()
+        return PaymentProcessingResult(
+            reference=payment.payment_reference,
+            event_type=PAYMENT_SUCCESS_EVENT,
+            status=payment.status,
+            processed=True,
+            registration_ids=self._collect_registration_ids(payment),
+            ticket_email_messages=[],
         )
 
     async def _mark_failed(self, payment: Payment) -> PaymentProcessingResult:

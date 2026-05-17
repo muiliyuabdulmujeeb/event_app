@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.core.exceptions import EventConflictError, EventNotFoundError, EventValidationError
 from app.models.event import Event, EventFieldDefinition, EventState, OverflowRule
 from app.models.registration import RegistrationState
 from app.models.staff import StaffAccount
 from app.repositories.event_repository import EventRepository, EventSummaryRow
+from app.schemas.email import EmailMessage
 from app.schemas.event import (
     AdminEventDetailResponse,
     AdminEventListResponse,
@@ -24,6 +26,8 @@ from app.schemas.event import (
     PublicEventListResponse,
     PublicEventSummaryResponse,
 )
+from app.schemas.notification import NotificationMethod, PriceChangeScope
+from app.services.notification_service import NotificationDispatchResult, NotificationService
 
 
 ALLOWED_EVENT_STATE_TRANSITIONS: dict[EventState, set[EventState]] = {
@@ -34,12 +38,24 @@ ALLOWED_EVENT_STATE_TRANSITIONS: dict[EventState, set[EventState]] = {
 }
 
 
+@dataclass(frozen=True)
+class EventMutationResult:
+    response: AdminEventDetailResponse
+    email_messages: list[EmailMessage]
+
+
 @dataclass
 class EventService:
     session: AsyncSession
+    settings: Settings | None = None
 
     def __post_init__(self) -> None:
         self.repository = EventRepository(self.session)
+        self.notification_service = (
+            NotificationService(self.session, self.settings)
+            if self.settings is not None
+            else None
+        )
 
     async def create_event(self, payload: EventCreateRequest, created_by: StaffAccount) -> AdminEventDetailResponse:
         event = Event(
@@ -78,8 +94,9 @@ class EventService:
         event = await self._get_event_or_raise(event_id)
         return await self._build_admin_detail_response(event)
 
-    async def update_event(self, event_id: str, payload: EventUpdateRequest) -> AdminEventDetailResponse:
+    async def update_event(self, event_id: str, payload: EventUpdateRequest) -> EventMutationResult:
         event = await self._get_event_or_raise(event_id)
+        original_price = event.price
 
         if payload.prefix is not None and payload.prefix != event.prefix:
             raise EventValidationError("Event prefix cannot be changed after creation.")
@@ -109,14 +126,31 @@ class EventService:
             await self.session.rollback()
             raise self._map_integrity_error(exc) from exc
 
+        dispatch_result = NotificationDispatchResult()
+        if (
+            payload.price is not None
+            and payload.price != original_price
+            and payload.price_change_scope == PriceChangeScope.ALL_EXISTING_CONFIRMED
+        ):
+            if self.notification_service is None:
+                raise EventValidationError("Notification service is not configured for price change updates.")
+            dispatch_result = await self.notification_service.dispatch_price_change_notifications(
+                event=event,
+                method=payload.notification_method or NotificationMethod.IN_APP,
+                body=payload.notification_body or "",
+            )
+
         event = await self._get_event_or_raise(event_id)
-        return await self._build_admin_detail_response(event)
+        return EventMutationResult(
+            response=await self._build_admin_detail_response(event),
+            email_messages=dispatch_result.email_messages,
+        )
 
     async def update_event_state(
         self,
         event_id: str,
         payload: EventStateUpdateRequest,
-    ) -> AdminEventDetailResponse:
+    ) -> EventMutationResult:
         event = await self._get_event_or_raise(event_id)
 
         if payload.state not in ALLOWED_EVENT_STATE_TRANSITIONS[event.state]:
@@ -125,9 +159,21 @@ class EventService:
             )
 
         event.state = payload.state
+        dispatch_result = NotificationDispatchResult()
+        if payload.state == EventState.CANCELLED:
+            if self.notification_service is None:
+                raise EventValidationError("Notification service is not configured for event cancellation.")
+            dispatch_result = await self.notification_service.dispatch_event_cancellation_notifications(
+                event=event,
+                method=payload.notification_method or NotificationMethod.IN_APP,
+                body=payload.notification_body or "",
+            )
         await self.session.flush()
         event = await self._get_event_or_raise(event_id)
-        return await self._build_admin_detail_response(event)
+        return EventMutationResult(
+            response=await self._build_admin_detail_response(event),
+            email_messages=dispatch_result.email_messages,
+        )
 
     async def list_public_events(
         self,

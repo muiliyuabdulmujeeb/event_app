@@ -81,6 +81,7 @@ class RegistrationService:
         payload: RegistrationCreateRequest,
     ) -> RegistrationServiceResult:
         event = await self._load_public_event_or_raise(event_id)
+        event = await self._lock_capacity_managed_event(event)
 
         await self._validate_duplicate_email(event.id, payload.email, payload.acknowledge_duplicate)
 
@@ -132,6 +133,7 @@ class RegistrationService:
         payload: BatchRegistrationCreateRequest,
     ) -> BatchRegistrationServiceResult:
         event = await self._load_public_event_or_raise(event_id)
+        event = await self._lock_capacity_managed_event(event)
 
         if len(payload.participants) < 4:
             raise RegistrationValidationError("Batch registration requires a minimum of 4 participants.")
@@ -233,11 +235,21 @@ class RegistrationService:
 
     async def _load_public_event_or_raise(self, event_id: str) -> Event:
         event = await self.repository.get_event_with_fields(event_id)
+        self._ensure_event_accepts_registration(event)
+        return event
+
+    async def _lock_capacity_managed_event(self, event: Event) -> Event:
+        if event.capacity is None:
+            return event
+        locked_event = await self.repository.lock_event(event.id)
+        self._ensure_event_accepts_registration(locked_event)
+        return locked_event
+
+    def _ensure_event_accepts_registration(self, event: Event | None) -> None:
         if event is None or event.state == EventState.DRAFT:
             raise EventNotFoundError("Event not found.")
         if event.state in {EventState.CANCELLED, EventState.COMPLETED}:
             raise RegistrationConflictError("This event is no longer accepting registrations.")
-        return event
 
     async def _validate_duplicate_email(self, event_id: str, email: str, acknowledged: bool) -> None:
         email_exists = await self.repository.email_exists_for_event(event_id, email)

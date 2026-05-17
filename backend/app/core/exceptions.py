@@ -85,6 +85,10 @@ class RegistrationNotFoundError(NotFoundError):
     detail = "Registration not found."
 
 
+class UserNotificationNotFoundError(NotFoundError):
+    detail = "User notification not found."
+
+
 class PaymentConfigurationError(AppError):
     detail = "Payment gateway configuration is invalid."
 
