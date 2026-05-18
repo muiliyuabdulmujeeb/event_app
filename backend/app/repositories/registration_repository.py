@@ -118,6 +118,7 @@ class RegistrationRepository:
                 selectinload(Registration.payment),
                 selectinload(Registration.field_values).selectinload(RegistrationFieldValue.field_definition),
                 selectinload(Registration.user_notifications),
+                selectinload(Registration.waitlist_promotion_offer),
             )
         )
         if for_update:
@@ -140,6 +141,7 @@ class RegistrationRepository:
                 selectinload(Registration.event).selectinload(Event.field_definitions),
                 selectinload(Registration.payment),
                 selectinload(Registration.field_values).selectinload(RegistrationFieldValue.field_definition),
+                selectinload(Registration.waitlist_promotion_offer),
             )
         )
         if states is not None:

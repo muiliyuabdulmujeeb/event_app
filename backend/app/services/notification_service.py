@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.security import utc_now
 from app.core.exceptions import (
     EventNotFoundError,
     RegistrationNotFoundError,
@@ -25,6 +26,7 @@ from app.schemas.notification import (
     RegistrationLookupCustomFieldValueResponse,
     RegistrationLookupEventResponse,
     RegistrationLookupPaymentResponse,
+    RegistrationLookupPromotionOfferResponse,
     RegistrationLookupRegistrationResponse,
     RegistrationLookupResponse,
     RegistrationRefundUpdateRequest,
@@ -33,6 +35,7 @@ from app.schemas.notification import (
     UserNotificationSeenResponse,
 )
 from app.services.email_templates import build_ticket_email_message
+from app.models.waitlist_promotion_offer import WaitlistPromotionOffer, WaitlistPromotionOfferStatus
 
 
 DEFAULT_EVENT_CANCELLATION_TITLE = "Event Cancelled"
@@ -97,6 +100,7 @@ class NotificationService:
                 if registration.payment is not None
                 else None
             ),
+            promotion_offer=self._build_lookup_promotion_offer(registration.waitlist_promotion_offer),
             notifications=[
                 UserNotificationResponse(
                     id=notification.id,
@@ -436,6 +440,31 @@ class NotificationService:
             registered_at=registration.registered_at,
             is_batch=registration.batch_id is not None,
             custom_field_values=custom_field_values,
+        )
+
+    def _build_lookup_promotion_offer(
+        self,
+        offer: WaitlistPromotionOffer | None,
+    ) -> RegistrationLookupPromotionOfferResponse | None:
+        if offer is None:
+            return None
+
+        payment_action_url: str | None = None
+        if (
+            offer.status in {WaitlistPromotionOfferStatus.OFFERED, WaitlistPromotionOfferStatus.PAYMENT_INITIALIZED}
+            and offer.offer_expires_at > utc_now()
+            and offer.registration.state == RegistrationState.PENDING_PAYMENT
+        ):
+            payment_action_url = (
+                f"{self.settings.application_base_url.rstrip('/')}"
+                f"/registrations/payment-offers/{offer.public_token}/initialize"
+            )
+
+        return RegistrationLookupPromotionOfferResponse(
+            public_token=offer.public_token,
+            status=offer.status,
+            offer_expires_at=offer.offer_expires_at,
+            payment_action_url=payment_action_url,
         )
 
     def _build_bulk_event_email_messages(

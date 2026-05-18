@@ -643,6 +643,7 @@ def test_registration_state_transition_rules() -> None:
     service = RegistrationService(session=None, settings=get_settings())  # type: ignore[arg-type]
     service.validate_state_transition(RegistrationState.PENDING_PAYMENT, RegistrationState.CONFIRMED)
     service.validate_state_transition(RegistrationState.CONFIRMED, RegistrationState.REFUND_REQUESTED)
+    service.validate_state_transition(RegistrationState.WAITLISTED, RegistrationState.PENDING_PAYMENT)
 
     with pytest.raises(RegistrationValidationError, match="Invalid registration state transition"):
         service.validate_state_transition(RegistrationState.CONFIRMED, RegistrationState.FAILED)

@@ -29,6 +29,8 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("JWT_SECRET", "changeme")
 os.environ.setdefault("JWT_ACCESS_EXPIRY_HOURS", "1")
 os.environ.setdefault("JWT_REFRESH_EXPIRY_DAYS", "7")
+os.environ.setdefault("APPLICATION_BASE_URL", "http://localhost:8000")
+os.environ.setdefault("WAITLIST_PROMOTION_DEFAULT_EXPIRY_MINUTES", "30")
 os.environ.setdefault("EMAIL_PROVIDER", "mock")
 os.environ.setdefault("EMAIL_FROM_NAME", "Event Management")
 

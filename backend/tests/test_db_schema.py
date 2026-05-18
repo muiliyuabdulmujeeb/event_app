@@ -16,7 +16,7 @@ def test_initial_migration_applied(sync_engine) -> None:
     with sync_engine.connect() as connection:
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert revision == "20260426_02"
+    assert revision == "20260517_01"
 
 
 def test_expected_tables_exist(sync_engine) -> None:
@@ -36,6 +36,7 @@ def test_expected_tables_exist(sync_engine) -> None:
         "staff_event_access",
         "staff_notifications",
         "user_notifications",
+        "waitlist_promotion_offers",
     }
 
     assert expected_tables.issubset(table_names)

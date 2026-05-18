@@ -129,8 +129,28 @@ class StaffAccessForbiddenError(AuthorizationError):
     detail = "You do not have access to registrations for this event."
 
 
+class StaffOperationForbiddenError(AuthorizationError):
+    pass
+
+
 class InvalidWebhookSignatureError(BadRequestError):
     detail = "Webhook signature is invalid."
+
+
+class WaitlistPromotionNotFoundError(NotFoundError):
+    detail = "Waitlist promotion offer not found."
+
+
+class WaitlistPromotionValidationError(ValidationError):
+    pass
+
+
+class WaitlistPromotionConflictError(ConflictError):
+    pass
+
+
+class WaitlistPromotionExpiredError(WaitlistPromotionConflictError):
+    detail = "This payment offer has expired."
 
 
 class DuplicateRegistrationError(RegistrationConflictError):

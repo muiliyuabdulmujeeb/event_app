@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from app.models.event import EventState
 from app.models.payment import PaymentStatus
 from app.models.registration import RegistrationState
+from app.schemas.waitlist_promotion import RegistrationLookupPromotionOfferResponse
 
 
 class NotificationMethod(str, enum.Enum):
@@ -72,6 +73,7 @@ class RegistrationLookupResponse(BaseModel):
     registration: RegistrationLookupRegistrationResponse
     event: RegistrationLookupEventResponse
     payment: RegistrationLookupPaymentResponse | None
+    promotion_offer: RegistrationLookupPromotionOfferResponse | None = None
     notifications: list[UserNotificationResponse]
 
 

@@ -5,7 +5,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_current_account, get_db_session
+from app.core.config import Settings
+from app.core.dependencies import get_app_settings, get_current_account, get_db_session
 from app.core.exceptions import AppError, as_http_exception
 from app.models.staff import StaffAccount
 from app.schemas.staff import (
@@ -14,7 +15,10 @@ from app.schemas.staff import (
     StaffNotificationReadResponse,
     StaffRegistrationSearchResponse,
 )
+from app.schemas.waitlist_promotion import WaitlistPromotionRequest, WaitlistPromotionResponse
+from app.services.email_service import EmailService
 from app.services.staff_service import StaffService
+from app.services.waitlist_promotion_service import WaitlistPromotionService
 
 
 router = APIRouter(prefix="/staff", tags=["staff"])
@@ -69,6 +73,26 @@ async def uncheck_in_registration(
         response = await service.uncheck_in_registration(actor=account, reg_id=reg_id)
         await _commit_or_rollback(session)
         return response
+    except AppError as exc:
+        await session.rollback()
+        raise as_http_exception(exc) from exc
+
+
+@router.patch("/registrations/{reg_id}/promote", response_model=WaitlistPromotionResponse, status_code=status.HTTP_200_OK)
+async def promote_waitlisted_registration(
+    reg_id: str,
+    payload: WaitlistPromotionRequest,
+    account: Annotated[StaffAccount, Depends(get_current_account)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> WaitlistPromotionResponse:
+    service = WaitlistPromotionService(session=session, settings=settings)
+    email_service = EmailService(settings=settings)
+    try:
+        result = await service.promote_waitlisted_registration(actor=account, reg_id=reg_id, payload=payload)
+        await _commit_or_rollback(session)
+        email_service.enqueue_messages(result.email_messages)
+        return result.response
     except AppError as exc:
         await session.rollback()
         raise as_http_exception(exc) from exc

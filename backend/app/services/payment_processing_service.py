@@ -10,6 +10,7 @@ from app.core.exceptions import PaymentNotFoundError
 from app.core.security import utc_now
 from app.models.payment import Payment, PaymentStatus
 from app.models.registration import Registration, RegistrationState
+from app.models.waitlist_promotion_offer import WaitlistPromotionOfferStatus
 from app.repositories.payment_repository import PaymentRepository
 from app.schemas.email import EmailMessage
 from app.services.email_templates import build_ticket_email_message
@@ -110,6 +111,8 @@ class PaymentProcessingService:
         affected_registrations = self._pending_owner_registrations(payment)
         for registration in affected_registrations:
             registration.state = RegistrationState.CONFIRMED
+            if registration.waitlist_promotion_offer is not None:
+                registration.waitlist_promotion_offer.status = WaitlistPromotionOfferStatus.PAID
 
         await self.session.flush()
         ticket_email_messages = [
@@ -133,6 +136,8 @@ class PaymentProcessingService:
     ) -> PaymentProcessingResult:
         payment.status = PaymentStatus.SUCCESSFUL
         payment.paid_at = paid_at
+        if payment.registration is not None and payment.registration.waitlist_promotion_offer is not None:
+            payment.registration.waitlist_promotion_offer.status = WaitlistPromotionOfferStatus.MANUAL_REVIEW
         await self.notification_service.notify_manual_payment_review(
             payment=payment,
             paid_at=paid_at.isoformat(),
@@ -154,6 +159,8 @@ class PaymentProcessingService:
         affected_registrations = self._pending_owner_registrations(payment)
         for registration in affected_registrations:
             registration.state = RegistrationState.FAILED
+            if registration.waitlist_promotion_offer is not None:
+                registration.waitlist_promotion_offer.status = WaitlistPromotionOfferStatus.FAILED
 
         await self.session.flush()
         return PaymentProcessingResult(

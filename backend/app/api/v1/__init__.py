@@ -10,6 +10,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.payments import router as payments_router
 from app.api.v1.public.events import router as public_events_router
 from app.api.v1.public.lookup import router as public_lookup_router
+from app.api.v1.public.payment_offers import router as public_payment_offers_router
 from app.api.v1.public.registrations import router as public_registrations_router
 from app.api.v1.staff import router as staff_router
 
@@ -24,3 +25,4 @@ api_router.include_router(staff_router)
 api_router.include_router(public_events_router)
 api_router.include_router(public_registrations_router)
 api_router.include_router(public_lookup_router)
+api_router.include_router(public_payment_offers_router)

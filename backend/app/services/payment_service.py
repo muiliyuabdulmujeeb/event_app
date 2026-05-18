@@ -56,7 +56,7 @@ class PaymentService:
             payment_reference=result.payment_reference,
             amount=event.price,
             status=PaymentStatus.PENDING,
-            registration_id=registration.id,
+            registration=registration,
         )
         await self.repository.create_payment(payment)
         return result
@@ -89,7 +89,7 @@ class PaymentService:
             payment_reference=result.payment_reference,
             amount=batch_registration.total_amount,
             status=PaymentStatus.PENDING,
-            batch_id=batch_registration.id,
+            batch_registration=batch_registration,
         )
         await self.repository.create_payment(payment)
         return result

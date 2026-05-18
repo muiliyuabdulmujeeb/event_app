@@ -12,6 +12,7 @@ celery_app = Celery(
     include=[
         "app.workers.email_tasks",
         "app.workers.payment_tasks",
+        "app.workers.waitlist_promotion_tasks",
     ],
 )
 
@@ -25,7 +26,11 @@ celery_app.conf.update(
         "expire-stale-payments": {
             "task": "app.workers.payment_tasks.expire_stale_payments",
             "schedule": 300.0,
-        }
+        },
+        "expire-stale-waitlist-promotion-offers": {
+            "task": "app.workers.waitlist_promotion_tasks.expire_stale_waitlist_promotion_offers",
+            "schedule": 300.0,
+        },
     },
 )
 

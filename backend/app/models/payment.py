@@ -11,6 +11,7 @@ from app.db.base import Base, CreatedAtMixin, UpdatedAtMixin, new_id
 
 if TYPE_CHECKING:
     from app.models.registration import BatchRegistration, Registration
+    from app.models.waitlist_promotion_offer import WaitlistPromotionOffer
 
 
 class PaymentGateway(str, enum.Enum):
@@ -58,6 +59,11 @@ class Payment(Base, CreatedAtMixin, UpdatedAtMixin):
 
     registration: Mapped["Registration | None"] = relationship(back_populates="payment")
     batch_registration: Mapped["BatchRegistration | None"] = relationship(back_populates="payment")
+    waitlist_promotion_offer: Mapped["WaitlistPromotionOffer | None"] = relationship(
+        back_populates="payment",
+        uselist=False,
+    )
 
 
 from app.models.registration import BatchRegistration, Registration  # noqa: E402
+from app.models.waitlist_promotion_offer import WaitlistPromotionOffer  # noqa: E402

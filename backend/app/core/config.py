@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     paystack_checkout_base_url: str = Field("https://checkout.paystack.com", alias="PAYSTACK_CHECKOUT_BASE_URL")
     squad_checkout_base_url: str = Field("https://checkout.squadco.com", alias="SQUAD_CHECKOUT_BASE_URL")
     payment_timeout_minutes: int = Field(30, alias="PAYMENT_TIMEOUT_MINUTES")
+    application_base_url: str = Field("http://localhost:8000", alias="APPLICATION_BASE_URL")
+    waitlist_promotion_default_expiry_minutes: int = Field(30, alias="WAITLIST_PROMOTION_DEFAULT_EXPIRY_MINUTES")
     email_provider: str = Field("console", alias="EMAIL_PROVIDER")
     email_api_key: str = Field("", alias="EMAIL_API_KEY")
     email_from: str = Field("noreply@eventapp.local", alias="EMAIL_FROM")

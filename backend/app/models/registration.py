@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from app.models.event import Event, EventFieldDefinition
     from app.models.notification import UserNotification
     from app.models.payment import Payment
+    from app.models.waitlist_promotion_offer import WaitlistPromotionOffer
 
 
 class RegistrationState(str, enum.Enum):
@@ -124,6 +125,11 @@ class Registration(Base, UpdatedAtMixin):
         back_populates="registration",
         cascade="all, delete-orphan",
     )
+    waitlist_promotion_offer: Mapped["WaitlistPromotionOffer | None"] = relationship(
+        back_populates="registration",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
 
 class RegistrationFieldValue(Base):
@@ -156,3 +162,4 @@ class RegistrationFieldValue(Base):
 from app.models.event import Event, EventFieldDefinition  # noqa: E402
 from app.models.notification import UserNotification  # noqa: E402
 from app.models.payment import Payment  # noqa: E402
+from app.models.waitlist_promotion_offer import WaitlistPromotionOffer  # noqa: E402

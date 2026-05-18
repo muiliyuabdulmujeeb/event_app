@@ -17,6 +17,7 @@ from app.models.staff import (
     StaffEventAccess,
     StaffRole,
 )
+from app.models.waitlist_promotion_offer import WaitlistPromotionOffer, WaitlistPromotionOfferStatus
 
 __all__ = [
     "BatchRegistration",
@@ -39,4 +40,6 @@ __all__ = [
     "StaffNotification",
     "StaffRole",
     "UserNotification",
+    "WaitlistPromotionOffer",
+    "WaitlistPromotionOfferStatus",
 ]

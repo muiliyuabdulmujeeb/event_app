@@ -57,6 +57,7 @@ ALLOWED_REGISTRATION_STATE_TRANSITIONS: dict[RegistrationState, set[Registration
     },
     RegistrationState.REFUND_REQUESTED: {RegistrationState.REFUNDED},
     RegistrationState.WAITLISTED: {
+        RegistrationState.PENDING_PAYMENT,
         RegistrationState.CONFIRMED,
         RegistrationState.CANCELLED,
     },
