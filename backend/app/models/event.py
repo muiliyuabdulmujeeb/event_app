@@ -22,7 +22,10 @@ from app.db.base import Base, CreatedAtMixin, UpdatedAtMixin, new_id
 
 if TYPE_CHECKING:
     from app.models.registration import BatchRegistration, Registration
+    from app.models.exception_registration_offer import ExceptionRegistrationOffer
+    from app.models.manual_review_case import ManualReviewCase
     from app.models.staff import StaffAccount, StaffEventAccess
+    from app.models.staff_event_authorization import StaffEventAuthorization
 
 
 class EventState(str, enum.Enum):
@@ -102,6 +105,15 @@ class Event(Base, CreatedAtMixin, UpdatedAtMixin):
         back_populates="event",
         cascade="all, delete-orphan",
     )
+    staff_authorizations: Mapped[list["StaffEventAuthorization"]] = relationship(
+        back_populates="event",
+        cascade="all, delete-orphan",
+    )
+    exception_offers: Mapped[list["ExceptionRegistrationOffer"]] = relationship(
+        back_populates="event",
+        cascade="all, delete-orphan",
+    )
+    manual_review_cases: Mapped[list["ManualReviewCase"]] = relationship(back_populates="event")
 
 
 class EventFieldDefinition(Base):
@@ -133,3 +145,6 @@ class EventFieldDefinition(Base):
 
 
 from app.models.registration import RegistrationFieldValue  # noqa: E402
+from app.models.exception_registration_offer import ExceptionRegistrationOffer  # noqa: E402
+from app.models.manual_review_case import ManualReviewCase  # noqa: E402
+from app.models.staff_event_authorization import StaffEventAuthorization  # noqa: E402

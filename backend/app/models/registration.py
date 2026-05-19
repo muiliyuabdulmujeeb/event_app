@@ -23,8 +23,11 @@ from app.db.base import Base, CreatedAtMixin, UpdatedAtMixin, new_id
 
 if TYPE_CHECKING:
     from app.models.event import Event, EventFieldDefinition
+    from app.models.exception_registration_offer import ExceptionRegistrationOffer
+    from app.models.manual_review_case import ManualReviewCase
     from app.models.notification import UserNotification
     from app.models.payment import Payment
+    from app.models.refund_request import RefundRequest
     from app.models.waitlist_promotion_offer import WaitlistPromotionOffer
 
 
@@ -33,9 +36,12 @@ class RegistrationState(str, enum.Enum):
     CONFIRMED = "confirmed"
     FAILED = "failed"
     CANCELLED = "cancelled"
-    REFUND_REQUESTED = "refund_requested"
-    REFUNDED = "refunded"
     WAITLISTED = "waitlisted"
+
+
+class CancellationReason(str, enum.Enum):
+    USER_CANCELLED = "user_cancelled"
+    OVERFLOW_RULE_CHANGED = "overflow_rule_changed"
 
 
 class BatchRegistration(Base, CreatedAtMixin):
@@ -69,6 +75,10 @@ class Registration(Base, UpdatedAtMixin):
     __table_args__ = (
         CheckConstraint("waitlist_position IS NULL OR waitlist_position > 0", name="waitlist_position_positive"),
         CheckConstraint(
+            "previous_waitlist_position IS NULL OR previous_waitlist_position > 0",
+            name="previous_waitlist_position_positive",
+        ),
+        CheckConstraint(
             "reg_id ~ '^[A-Z0-9]{2,5}-[0-9]{4}-[A-Z0-9]{6}$'",
             name="reg_id_format",
         ),
@@ -100,8 +110,29 @@ class Registration(Base, UpdatedAtMixin):
     )
     checked_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     waitlist_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    was_waitlisted: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+    previous_waitlist_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cancellation_reason: Mapped[CancellationReason | None] = mapped_column(
+        Enum(CancellationReason, name="cancellation_reason", native_enum=False, length=32),
+        nullable=True,
+    )
     batch_id: Mapped[str | None] = mapped_column(
         ForeignKey("batch_registrations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    current_payment_id: Mapped[str | None] = mapped_column(
+        ForeignKey(
+            "payments.id",
+            name="fk_registrations_current_payment_id_payments",
+            ondelete="SET NULL",
+            use_alter=True,
+        ),
         nullable=True,
         index=True,
     )
@@ -118,16 +149,35 @@ class Registration(Base, UpdatedAtMixin):
         cascade="all, delete-orphan",
     )
     payment: Mapped["Payment | None"] = relationship(
-        back_populates="registration",
+        foreign_keys=[current_payment_id],
         uselist=False,
+        post_update=True,
+        overlaps="payments,registration",
+    )
+    payments: Mapped[list["Payment"]] = relationship(
+        back_populates="registration",
+        cascade="save-update, merge",
+        foreign_keys="Payment.registration_id",
+        order_by="Payment.attempt_number",
+        overlaps="payment",
     )
     user_notifications: Mapped[list["UserNotification"]] = relationship(
         back_populates="registration",
         cascade="all, delete-orphan",
     )
+    refund_requests: Mapped[list["RefundRequest"]] = relationship(
+        back_populates="registration",
+        cascade="all, delete-orphan",
+        order_by="RefundRequest.requested_at.desc()",
+    )
     waitlist_promotion_offer: Mapped["WaitlistPromotionOffer | None"] = relationship(
         back_populates="registration",
         cascade="all, delete-orphan",
+        uselist=False,
+    )
+    manual_review_cases: Mapped[list["ManualReviewCase"]] = relationship(back_populates="registration")
+    exception_offer: Mapped["ExceptionRegistrationOffer | None"] = relationship(
+        back_populates="used_registration",
         uselist=False,
     )
 
@@ -160,6 +210,9 @@ class RegistrationFieldValue(Base):
 
 
 from app.models.event import Event, EventFieldDefinition  # noqa: E402
+from app.models.exception_registration_offer import ExceptionRegistrationOffer  # noqa: E402
+from app.models.manual_review_case import ManualReviewCase  # noqa: E402
 from app.models.notification import UserNotification  # noqa: E402
 from app.models.payment import Payment  # noqa: E402
+from app.models.refund_request import RefundRequest  # noqa: E402
 from app.models.waitlist_promotion_offer import WaitlistPromotionOffer  # noqa: E402

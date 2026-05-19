@@ -80,21 +80,23 @@ async def create_registration(
     await db_session.flush()
 
     if payment_status is not None:
-        db_session.add(
-            Payment(
-                gateway=PaymentGateway.MOCK,
-                payment_reference=f"MOCK_{reg_id.replace('-', '')}",
-                amount=payment_amount if payment_amount is not None else event.price,
-                currency="NGN",
-                status=payment_status,
-                registration_id=registration.id,
-                paid_at=(
-                    datetime(2026, 5, 16, 9, 0, tzinfo=timezone.utc)
-                    if payment_status == PaymentStatus.SUCCESSFUL
-                    else None
-                ),
-            )
+        payment = Payment(
+            gateway=PaymentGateway.MOCK,
+            payment_reference=f"MOCK_{reg_id.replace('-', '')}",
+            amount=payment_amount if payment_amount is not None else event.price,
+            currency="NGN",
+            status=payment_status,
+            registration_id=registration.id,
+            attempt_number=1,
+            paid_at=(
+                datetime(2026, 5, 16, 9, 0, tzinfo=timezone.utc)
+                if payment_status == PaymentStatus.SUCCESSFUL
+                else None
+            ),
         )
+        db_session.add(payment)
+        await db_session.flush()
+        registration.current_payment_id = payment.id
 
     await db_session.commit()
     await db_session.refresh(registration)
@@ -180,6 +182,57 @@ async def test_marking_unknown_user_notification_seen_returns_404(client) -> Non
 
     assert response.status_code == 404
     assert response.json() == {"detail": "User notification not found."}
+
+
+@pytest.mark.asyncio
+async def test_lookup_preserves_waitlist_history_after_overflow_rule_changes(
+    client,
+    db_session,
+    seeded_admin_account: StaffAccount,
+) -> None:
+    event = await create_event(
+        db_session,
+        created_by=seeded_admin_account,
+        title="Lookup Overflow History Event",
+        prefix="LOH",
+        price=5000,
+        capacity=1,
+        overflow_rule=OverflowRule.WAITLIST,
+    )
+    registration = await create_registration(
+        db_session,
+        event=event,
+        reg_id="LOH-2026-WTL001",
+        email="lookup.history@example.com",
+        state=RegistrationState.WAITLISTED,
+        waitlist_position=1,
+    )
+
+    response = await client.patch(
+        f"/admin/events/{event.id}/overflow-rule",
+        headers=await admin_headers(client),
+        json={"overflow_rule": "hard_rejection", "reason": "Close the waitlist."},
+    )
+    assert response.status_code == 200
+
+    lookup_response = await client.get("/registrations/lookup", params={"reg_id": registration.reg_id})
+
+    assert lookup_response.status_code == 200
+    assert lookup_response.json()["registration"] == {
+        "reg_id": registration.reg_id,
+        "first_name": "Amina",
+        "last_name": "Bello",
+        "email": "lookup.history@example.com",
+        "state": "cancelled",
+        "is_checked_in": False,
+        "checked_in_at": None,
+        "registered_at": lookup_response.json()["registration"]["registered_at"],
+        "is_batch": False,
+        "was_waitlisted": True,
+        "previous_waitlist_position": 1,
+        "cancellation_reason": "overflow_rule_changed",
+        "custom_field_values": [],
+    }
 
 
 @pytest.mark.asyncio
@@ -365,11 +418,10 @@ async def test_admin_custom_price_change_email_notification_sends_emails_only(
 
 
 @pytest.mark.asyncio
-async def test_refund_request_releases_capacity_and_promotes_next_waitlisted_registration_on_free_event(
+async def test_self_service_cancellation_releases_capacity_and_promotes_next_waitlisted_registration_on_free_event(
     client,
     db_session,
     seeded_admin_account: StaffAccount,
-    seeded_staff_account: StaffAccount,
     captured_email_tasks: list[dict],
 ) -> None:
     event = await create_event(
@@ -405,28 +457,21 @@ async def test_refund_request_releases_capacity_and_promotes_next_waitlisted_reg
         waitlist_position=2,
     )
 
-    response = await client.patch(
-        f"/admin/registrations/{confirmed_registration.reg_id}/refund",
-        headers=await admin_headers(client),
-        json={
-            "state": "refund_requested",
-            "notification_method": "in_app",
-            "message_body": "Your refund request has been recorded.",
-        },
-    )
+    response = await client.patch(f"/registrations/{confirmed_registration.reg_id}/cancel", json={})
 
     assert response.status_code == 200
     assert response.json() == {
         "reg_id": confirmed_registration.reg_id,
-        "state": "refund_requested",
+        "state": "cancelled",
+        "was_waitlisted": False,
+        "previous_waitlist_position": None,
+        "cancellation_reason": "user_cancelled",
+        "message": "Registration cancelled successfully.",
     }
 
     confirmed_registration_id = confirmed_registration.id
     promoted_registration_id = promoted_registration.id
     remaining_waitlist_id = remaining_waitlist.id
-    confirmed_registration_reg_id = confirmed_registration.reg_id
-    admin_staff_id = seeded_admin_account.id
-    regular_staff_id = seeded_staff_account.id
     await db_session.rollback()
     db_session.expire_all()
     confirmed_registration = (
@@ -441,25 +486,20 @@ async def test_refund_request_releases_capacity_and_promotes_next_waitlisted_reg
     user_notifications = (await db_session.execute(select(UserNotification))).scalars().all()
     staff_notifications = (await db_session.execute(select(StaffNotification))).scalars().all()
 
-    assert confirmed_registration.state == RegistrationState.REFUND_REQUESTED
+    assert confirmed_registration.state == RegistrationState.CANCELLED
     assert promoted_registration.state == RegistrationState.CONFIRMED
     assert promoted_registration.waitlist_position is None
     assert remaining_waitlist.state == RegistrationState.WAITLISTED
     assert remaining_waitlist.waitlist_position == 1
-    assert len(user_notifications) == 1
-    assert user_notifications[0].reg_id == confirmed_registration_reg_id
-    assert len(staff_notifications) == 2
-    assert {notification.staff_id for notification in staff_notifications} == {
-        admin_staff_id,
-        regular_staff_id,
-    }
+    assert user_notifications == []
+    assert staff_notifications == []
     assert len(captured_email_tasks) == 1
     assert captured_email_tasks[0]["to"] == ["promote@example.com"]
     assert captured_email_tasks[0]["subject"] == "Your ticket for Refund Waitlist Event"
 
 
 @pytest.mark.asyncio
-async def test_refund_requested_no_longer_consumes_capacity_for_paid_events(
+async def test_cancelled_registration_no_longer_consumes_capacity_for_paid_events(
     client,
     db_session,
     seeded_admin_account: StaffAccount,
@@ -482,16 +522,8 @@ async def test_refund_requested_no_longer_consumes_capacity_for_paid_events(
         payment_status=PaymentStatus.SUCCESSFUL,
     )
 
-    refund_response = await client.patch(
-        f"/admin/registrations/{registration.reg_id}/refund",
-        headers=await admin_headers(client),
-        json={
-            "state": "refund_requested",
-            "notification_method": "email",
-            "message_body": "Your refund request has been started.",
-        },
-    )
-    assert refund_response.status_code == 200
+    cancel_response = await client.patch(f"/registrations/{registration.reg_id}/cancel", json={})
+    assert cancel_response.status_code == 200
 
     new_registration_response = await client.post(
         f"/register/{event.id}",
@@ -508,7 +540,7 @@ async def test_refund_requested_no_longer_consumes_capacity_for_paid_events(
 
 
 @pytest.mark.asyncio
-async def test_refund_processed_email_sends_email_without_creating_in_app_notifications(
+async def test_refund_request_completion_email_sends_email_without_creating_in_app_notifications(
     client,
     db_session,
     seeded_admin_account: StaffAccount,
@@ -520,15 +552,23 @@ async def test_refund_processed_email_sends_email_without_creating_in_app_notifi
         event=seeded_paid_published_event,
         reg_id="TEC-2026-RFD001",
         email="refund@example.com",
-        state=RegistrationState.REFUND_REQUESTED,
+        state=RegistrationState.CONFIRMED,
         payment_status=PaymentStatus.SUCCESSFUL,
     )
+    cancel_response = await client.patch(f"/registrations/{registration.reg_id}/cancel", json={})
+    assert cancel_response.status_code == 200
+    refund_request_response = await client.post(
+        f"/registrations/{registration.reg_id}/refund-requests",
+        json={"reason": "Refund requested after cancellation."},
+    )
+    assert refund_request_response.status_code == 201
+    refund_request_id = refund_request_response.json()["refund_request_id"]
 
     response = await client.patch(
-        f"/admin/registrations/{registration.reg_id}/refund",
+        f"/admin/refund-requests/{refund_request_id}",
         headers=await admin_headers(client),
         json={
-            "state": "refunded",
+            "status": "completed",
             "notification_method": "email",
             "message_body": "Your refund has been completed.",
         },
@@ -536,8 +576,11 @@ async def test_refund_processed_email_sends_email_without_creating_in_app_notifi
 
     assert response.status_code == 200
     assert response.json() == {
+        "refund_request_id": refund_request_id,
         "reg_id": registration.reg_id,
-        "state": "refunded",
+        "status": "completed",
+        "processed_at": response.json()["processed_at"],
+        "message": "Refund request updated successfully.",
     }
 
     user_notifications = (await db_session.execute(select(UserNotification))).scalars().all()
@@ -546,4 +589,4 @@ async def test_refund_processed_email_sends_email_without_creating_in_app_notifi
     assert staff_notifications == []
     assert len(captured_email_tasks) == 1
     assert captured_email_tasks[0]["to"] == ["refund@example.com"]
-    assert captured_email_tasks[0]["subject"] == "Refund Processed"
+    assert captured_email_tasks[0]["subject"] == "Refund Completed"

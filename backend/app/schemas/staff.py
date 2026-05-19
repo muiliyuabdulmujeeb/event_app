@@ -97,6 +97,53 @@ class StaffAccessConfigResponse(BaseModel):
     selected_events: list[StaffSelectedEventSummary]
 
 
+class EventAuthorizationPermissionsResponse(BaseModel):
+    can_manage_exception_offers: bool
+    can_change_overflow_rule: bool
+    can_manage_manual_reviews: bool
+    can_requeue_registrations: bool
+
+
+class EventAuthorizationUpdateRequest(BaseModel):
+    can_manage_exception_offers: bool = False
+    can_change_overflow_rule: bool = False
+    can_manage_manual_reviews: bool = False
+    can_requeue_registrations: bool = False
+
+    @model_validator(mode="after")
+    def validate_at_least_one_permission(self) -> "EventAuthorizationUpdateRequest":
+        if not any(
+            (
+                self.can_manage_exception_offers,
+                self.can_change_overflow_rule,
+                self.can_manage_manual_reviews,
+                self.can_requeue_registrations,
+            )
+        ):
+            raise ValueError("At least one delegated permission must be granted.")
+        return self
+
+
+class EventAuthorizationResponse(BaseModel):
+    event_id: str
+    account_id: str
+    role: StaffRole
+    permissions: EventAuthorizationPermissionsResponse
+    granted_by_staff_id: str
+    updated_at: datetime
+
+
+class EventAuthorizationListResponse(BaseModel):
+    event_id: str
+    authorizations: list[EventAuthorizationResponse]
+
+
+class EventAuthorizationRevokeResponse(BaseModel):
+    event_id: str
+    account_id: str
+    revoked: bool
+
+
 class StaffRegistrationCustomFieldValueResponse(BaseModel):
     label: str
     value: str
@@ -109,6 +156,7 @@ class StaffRegistrationEventSummary(BaseModel):
     location: str
     is_free: bool
     state: EventState
+    capacity_override_count: int
 
 
 class StaffRegistrationPaymentSummary(BaseModel):

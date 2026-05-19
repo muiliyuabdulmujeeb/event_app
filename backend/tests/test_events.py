@@ -3,17 +3,26 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
+from sqlalchemy import select
 
+from app.core.security import hash_password
 from app.models.event import Event, EventState, OverflowRule
+from app.models.refund_request import RefundRequest, RefundRequestedBy, RefundRequestStatus
 from app.models.registration import Registration, RegistrationState
+from app.models.staff import StaffAccessMode, StaffAccessModeRecord, StaffAccount, StaffRole
 
 
-async def admin_headers(client) -> dict[str, str]:
+async def admin_headers(
+    client,
+    *,
+    email: str = "admin@eventapp.local",
+    password: str = "Admin1234!",
+) -> dict[str, str]:
     response = await client.post(
         "/auth/login",
         json={
-            "email": "admin@eventapp.local",
-            "password": "Admin1234!",
+            "email": email,
+            "password": password,
         },
     )
     access_token = response.json()["access_token"]
@@ -30,6 +39,27 @@ async def staff_headers(client) -> dict[str, str]:
     )
     access_token = response.json()["access_token"]
     return {"Authorization": f"Bearer {access_token}"}
+
+
+async def create_account(
+    db_session,
+    *,
+    email: str,
+    role: StaffRole,
+    password: str,
+) -> StaffAccount:
+    account = StaffAccount(
+        email=email,
+        password_hash=hash_password(password),
+        role=role,
+        is_active=True,
+    )
+    db_session.add(account)
+    await db_session.flush()
+    db_session.add(StaffAccessModeRecord(staff_id=account.id, mode=StaffAccessMode.ALL_EVENTS))
+    await db_session.commit()
+    await db_session.refresh(account)
+    return account
 
 
 @pytest.mark.asyncio
@@ -554,6 +584,57 @@ async def test_admin_event_detail_includes_registration_counts(
 
 
 @pytest.mark.asyncio
+async def test_admin_event_detail_maps_refund_request_counts_from_refund_requests(
+    client,
+    db_session,
+    seeded_paid_published_event: Event,
+) -> None:
+    cancelled_registration = Registration(
+        event_id=seeded_paid_published_event.id,
+        first_name="Refund",
+        last_name="Requested",
+        email="requested@example.com",
+        reg_id="TEC-2026-RRQ001",
+        state=RegistrationState.CANCELLED,
+    )
+    refunded_registration = Registration(
+        event_id=seeded_paid_published_event.id,
+        first_name="Refund",
+        last_name="Completed",
+        email="completed@example.com",
+        reg_id="TEC-2026-RRQ002",
+        state=RegistrationState.CANCELLED,
+    )
+    db_session.add_all([cancelled_registration, refunded_registration])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            RefundRequest(
+                registration_id=cancelled_registration.id,
+                status=RefundRequestStatus.REQUESTED,
+                requested_by=RefundRequestedBy.PUBLIC,
+            ),
+            RefundRequest(
+                registration_id=refunded_registration.id,
+                status=RefundRequestStatus.COMPLETED,
+                requested_by=RefundRequestedBy.SYSTEM,
+                processed_at=datetime(2026, 5, 19, 12, 0, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await client.get(
+        f"/admin/events/{seeded_paid_published_event.id}",
+        headers=await admin_headers(client),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["registration_counts"]["refund_requested"] == 1
+    assert response.json()["registration_counts"]["refunded"] == 1
+
+
+@pytest.mark.asyncio
 async def test_staff_cannot_access_admin_event_routes(
     client,
     seeded_staff_account,
@@ -581,3 +662,242 @@ async def test_admin_and_public_event_detail_return_matching_field_definitions(
     public_fields = public_response.json()["custom_fields"]
 
     assert admin_fields == public_fields
+
+
+@pytest.mark.asyncio
+async def test_generic_event_update_rejects_overflow_rule_changes(
+    client,
+    seeded_paid_published_event: Event,
+) -> None:
+    response = await client.patch(
+        f"/admin/events/{seeded_paid_published_event.id}",
+        headers=await admin_headers(client),
+        json={"overflow_rule": "hard_rejection"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": "overflow_rule must be updated through /admin/events/{event_id}/overflow-rule."
+    }
+
+
+@pytest.mark.asyncio
+async def test_event_creator_can_switch_waitlist_to_hard_rejection_and_cancel_waitlisted_history(
+    client,
+    db_session,
+    seeded_admin_account: StaffAccount,
+    seeded_paid_published_event: Event,
+) -> None:
+    first_waitlisted = Registration(
+        event_id=seeded_paid_published_event.id,
+        first_name="First",
+        last_name="Waitlisted",
+        email="first.waitlisted@example.com",
+        reg_id="TEC-2026-WTL901",
+        state=RegistrationState.WAITLISTED,
+        waitlist_position=1,
+    )
+    second_waitlisted = Registration(
+        event_id=seeded_paid_published_event.id,
+        first_name="Second",
+        last_name="Waitlisted",
+        email="second.waitlisted@example.com",
+        reg_id="TEC-2026-WTL902",
+        state=RegistrationState.WAITLISTED,
+        waitlist_position=2,
+    )
+    db_session.add_all([first_waitlisted, second_waitlisted])
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/admin/events/{seeded_paid_published_event.id}/overflow-rule",
+        headers=await admin_headers(client),
+        json={
+            "overflow_rule": "hard_rejection",
+            "reason": "Closing the waitlist for operational reasons.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "event_id": seeded_paid_published_event.id,
+        "overflow_rule": "hard_rejection",
+        "affected_waitlisted_registrations": 2,
+        "message": "Overflow rule updated successfully.",
+    }
+
+    event_id = seeded_paid_published_event.id
+    first_waitlisted_id = first_waitlisted.id
+    second_waitlisted_id = second_waitlisted.id
+    await db_session.rollback()
+    db_session.expire_all()
+    event = (await db_session.execute(select(Event).where(Event.id == event_id))).scalar_one()
+    first_waitlisted = (
+        await db_session.execute(select(Registration).where(Registration.id == first_waitlisted_id))
+    ).scalar_one()
+    second_waitlisted = (
+        await db_session.execute(select(Registration).where(Registration.id == second_waitlisted_id))
+    ).scalar_one()
+
+    assert event.overflow_rule == OverflowRule.HARD_REJECTION
+    assert first_waitlisted.state == RegistrationState.CANCELLED
+    assert first_waitlisted.was_waitlisted is True
+    assert first_waitlisted.previous_waitlist_position == 1
+    assert first_waitlisted.waitlist_position is None
+    assert first_waitlisted.cancellation_reason.value == "overflow_rule_changed"
+    assert second_waitlisted.state == RegistrationState.CANCELLED
+    assert second_waitlisted.previous_waitlist_position == 2
+
+
+@pytest.mark.asyncio
+async def test_delegated_admin_can_switch_overflow_rule_but_unauthorized_admin_cannot(
+    client,
+    db_session,
+    seeded_paid_published_event: Event,
+) -> None:
+    delegated_admin = await create_account(
+        db_session,
+        email="overflow-delegate@eventapp.local",
+        role=StaffRole.ADMIN,
+        password="Delegate1234!",
+    )
+    unauthorized_admin = await create_account(
+        db_session,
+        email="overflow-unauthorized@eventapp.local",
+        role=StaffRole.ADMIN,
+        password="Unauthorized1234!",
+    )
+
+    grant_response = await client.put(
+        f"/admin/events/{seeded_paid_published_event.id}/authorizations/{delegated_admin.id}",
+        headers=await admin_headers(client),
+        json={"can_change_overflow_rule": True},
+    )
+    assert grant_response.status_code == 200
+
+    delegated_response = await client.patch(
+        f"/admin/events/{seeded_paid_published_event.id}/overflow-rule",
+        headers=await admin_headers(
+            client,
+            email=delegated_admin.email,
+            password="Delegate1234!",
+        ),
+        json={"overflow_rule": "hard_rejection", "reason": "Delegated overflow update."},
+    )
+    unauthorized_response = await client.patch(
+        f"/admin/events/{seeded_paid_published_event.id}/overflow-rule",
+        headers=await admin_headers(
+            client,
+            email=unauthorized_admin.email,
+            password="Unauthorized1234!",
+        ),
+        json={"overflow_rule": "waitlist", "reason": "Should be rejected."},
+    )
+
+    assert delegated_response.status_code == 200
+    assert delegated_response.json()["overflow_rule"] == "hard_rejection"
+    assert unauthorized_response.status_code == 403
+    assert unauthorized_response.json() == {
+        "detail": "Only the event creator or a delegated admin can change the overflow rule for this event."
+    }
+
+
+@pytest.mark.asyncio
+async def test_staff_cannot_change_overflow_rule(
+    client,
+    seeded_staff_account: StaffAccount,
+    seeded_paid_published_event: Event,
+) -> None:
+    response = await client.patch(
+        f"/admin/events/{seeded_paid_published_event.id}/overflow-rule",
+        headers=await staff_headers(client),
+        json={"overflow_rule": "hard_rejection", "reason": "Not allowed."},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "You do not have permission to perform this action."}
+
+
+@pytest.mark.asyncio
+async def test_switching_back_to_waitlist_does_not_reactivate_old_cancelled_waitlist_records(
+    client,
+    db_session,
+    seeded_admin_account: StaffAccount,
+) -> None:
+    event = Event(
+        title="Overflow Toggle Event",
+        description="Overflow toggle description",
+        event_date=datetime(2026, 12, 1, 10, 0, tzinfo=timezone.utc),
+        location="Lagos, Nigeria",
+        prefix="OTG",
+        price=0,
+        capacity=1,
+        overflow_rule=OverflowRule.WAITLIST,
+        state=EventState.PUBLISHED,
+        created_by=seeded_admin_account.id,
+    )
+    confirmed = Registration(
+        event=event,
+        first_name="Confirmed",
+        last_name="Attendee",
+        email="confirmed.toggle@example.com",
+        reg_id="OTG-2026-CNF001",
+        state=RegistrationState.CONFIRMED,
+    )
+    historical_waitlist = Registration(
+        event=event,
+        first_name="Historical",
+        last_name="Waitlisted",
+        email="historical.waitlist@example.com",
+        reg_id="OTG-2026-WTL001",
+        state=RegistrationState.WAITLISTED,
+        waitlist_position=1,
+    )
+    db_session.add_all([event, confirmed, historical_waitlist])
+    await db_session.commit()
+
+    first_switch = await client.patch(
+        f"/admin/events/{event.id}/overflow-rule",
+        headers=await admin_headers(client),
+        json={"overflow_rule": "hard_rejection", "reason": "Pause waitlist."},
+    )
+    assert first_switch.status_code == 200
+
+    second_switch = await client.patch(
+        f"/admin/events/{event.id}/overflow-rule",
+        headers=await admin_headers(client),
+        json={"overflow_rule": "waitlist", "reason": "Resume waitlist."},
+    )
+    assert second_switch.status_code == 200
+    assert second_switch.json()["affected_waitlisted_registrations"] == 0
+
+    reregister_response = await client.post(
+        f"/register/{event.id}",
+        json={
+            "first_name": "New",
+            "last_name": "Waitlisted",
+            "email": "new.waitlist@example.com",
+            "custom_field_values": [],
+        },
+    )
+    assert reregister_response.status_code == 201
+    assert reregister_response.json()["state"] == "waitlisted"
+
+    event_id = event.id
+    historical_waitlist_id = historical_waitlist.id
+    await db_session.rollback()
+    db_session.expire_all()
+    registrations = (
+        await db_session.execute(
+            select(Registration)
+            .where(Registration.event_id == event_id)
+            .order_by(Registration.reg_id.asc())
+        )
+    ).scalars().all()
+    historical_waitlist = next(item for item in registrations if item.id == historical_waitlist_id)
+    new_waitlist = next(item for item in registrations if item.email == "new.waitlist@example.com")
+
+    assert historical_waitlist.state == RegistrationState.CANCELLED
+    assert historical_waitlist.previous_waitlist_position == 1
+    assert new_waitlist.state == RegistrationState.WAITLISTED
+    assert new_waitlist.waitlist_position == 1

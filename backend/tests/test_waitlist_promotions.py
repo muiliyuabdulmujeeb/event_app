@@ -330,7 +330,7 @@ async def test_expired_payment_offer_initialization_marks_registration_failed_an
 
 
 @pytest.mark.asyncio
-async def test_paid_event_refund_does_not_auto_promote_waitlisted_registration(
+async def test_paid_event_cancellation_does_not_auto_promote_waitlisted_registration(
     client,
     db_session,
     seeded_admin_account: StaffAccount,
@@ -361,15 +361,7 @@ async def test_paid_event_refund_does_not_auto_promote_waitlisted_registration(
         waitlist_position=1,
     )
 
-    response = await client.patch(
-        f"/admin/registrations/{confirmed.reg_id}/refund",
-        headers=await auth_headers(client, email="admin@eventapp.local", password="Admin1234!"),
-        json={
-            "state": "refund_requested",
-            "notification_method": "in_app",
-            "message_body": "Your refund request has been recorded.",
-        },
-    )
+    response = await client.patch(f"/registrations/{confirmed.reg_id}/cancel", json={})
 
     assert response.status_code == 200
 
@@ -498,6 +490,46 @@ async def test_staff_cannot_promote_waitlisted_registration_for_inaccessible_eve
 
     assert response.status_code == 403
     assert response.json() == {"detail": "You do not have access to registrations for this event."}
+
+
+@pytest.mark.asyncio
+async def test_cancelled_former_waitlist_registration_cannot_be_promoted_after_overflow_rule_change(
+    client,
+    db_session,
+    seeded_admin_account: StaffAccount,
+) -> None:
+    event = await create_event(
+        db_session,
+        created_by=seeded_admin_account,
+        title="Historical Waitlist Promotion Event",
+        prefix="HWP",
+        price=5000,
+        capacity=1,
+        overflow_rule=OverflowRule.WAITLIST,
+    )
+    registration = await create_registration(
+        db_session,
+        event=event,
+        reg_id="HWP-2026-WTL001",
+        email="historical.promote@example.com",
+        state=RegistrationState.WAITLISTED,
+        waitlist_position=1,
+    )
+    overflow_response = await client.patch(
+        f"/admin/events/{event.id}/overflow-rule",
+        headers=await auth_headers(client, email="admin@eventapp.local", password="Admin1234!"),
+        json={"overflow_rule": "hard_rejection", "reason": "Close waitlist."},
+    )
+    assert overflow_response.status_code == 200
+
+    response = await client.patch(
+        f"/staff/registrations/{registration.reg_id}/promote",
+        headers=await auth_headers(client, email="admin@eventapp.local", password="Admin1234!"),
+        json={},
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Only waitlisted registrations can be promoted."}
 
 
 @pytest.mark.asyncio

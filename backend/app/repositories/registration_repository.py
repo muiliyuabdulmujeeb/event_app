@@ -3,18 +3,25 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.event import Event
 from app.models.payment import Payment
+from app.models.refund_request import RefundRequest, RefundRequestStatus
 from app.models.registration import BatchRegistration, Registration, RegistrationFieldValue, RegistrationState
 
 
 CAPACITY_OCCUPYING_STATES = (
     RegistrationState.PENDING_PAYMENT,
     RegistrationState.CONFIRMED,
+)
+
+DUPLICATE_BLOCKING_STATES = (
+    RegistrationState.PENDING_PAYMENT,
+    RegistrationState.CONFIRMED,
+    RegistrationState.WAITLISTED,
 )
 
 
@@ -45,10 +52,20 @@ class RegistrationRepository:
         return result.scalar_one_or_none()
 
     async def email_exists_for_event(self, event_id: str, email: str) -> bool:
+        requested_refund_exists = exists(
+            select(RefundRequest.id).where(
+                RefundRequest.registration_id == Registration.id,
+                RefundRequest.status == RefundRequestStatus.REQUESTED,
+            )
+        )
         result = await self.session.execute(
             select(Registration.id).where(
                 Registration.event_id == event_id,
                 func.lower(Registration.email) == email.lower(),
+                or_(
+                    Registration.state.in_(DUPLICATE_BLOCKING_STATES),
+                    requested_refund_exists,
+                ),
             )
         )
         return result.scalar_one_or_none() is not None
@@ -57,11 +74,21 @@ class RegistrationRepository:
         if not emails:
             return []
         lowered_emails = [email.lower() for email in emails]
+        requested_refund_exists = exists(
+            select(RefundRequest.id).where(
+                RefundRequest.registration_id == Registration.id,
+                RefundRequest.status == RefundRequestStatus.REQUESTED,
+            )
+        )
         result = await self.session.execute(
             select(func.lower(Registration.email))
             .where(
                 Registration.event_id == event_id,
                 func.lower(Registration.email).in_(lowered_emails),
+                or_(
+                    Registration.state.in_(DUPLICATE_BLOCKING_STATES),
+                    requested_refund_exists,
+                ),
             )
             .distinct()
         )
@@ -116,9 +143,12 @@ class RegistrationRepository:
             .options(
                 selectinload(Registration.event).selectinload(Event.field_definitions),
                 selectinload(Registration.payment),
+                selectinload(Registration.payments),
                 selectinload(Registration.field_values).selectinload(RegistrationFieldValue.field_definition),
+                selectinload(Registration.refund_requests),
                 selectinload(Registration.user_notifications),
                 selectinload(Registration.waitlist_promotion_offer),
+                selectinload(Registration.exception_offer),
             )
         )
         if for_update:
@@ -140,8 +170,11 @@ class RegistrationRepository:
             .options(
                 selectinload(Registration.event).selectinload(Event.field_definitions),
                 selectinload(Registration.payment),
+                selectinload(Registration.payments),
                 selectinload(Registration.field_values).selectinload(RegistrationFieldValue.field_definition),
+                selectinload(Registration.refund_requests),
                 selectinload(Registration.waitlist_promotion_offer),
+                selectinload(Registration.exception_offer),
             )
         )
         if states is not None:
@@ -167,7 +200,9 @@ class RegistrationRepository:
             .options(
                 selectinload(Registration.event).selectinload(Event.field_definitions),
                 selectinload(Registration.payment),
+                selectinload(Registration.payments),
                 selectinload(Registration.field_values).selectinload(RegistrationFieldValue.field_definition),
+                selectinload(Registration.exception_offer),
             )
         )
         if for_update:

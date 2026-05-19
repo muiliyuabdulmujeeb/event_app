@@ -11,6 +11,7 @@ from app.core.config import get_settings
 from app.core.exceptions import RegistrationValidationError
 from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
 from app.models.payment import Payment, PaymentStatus
+from app.models.refund_request import RefundRequest, RefundRequestedBy, RefundRequestStatus
 from app.models.registration import BatchRegistration, Registration, RegistrationState
 from app.models.staff import StaffAccount
 from app.services.registration_service import RegistrationService
@@ -249,6 +250,62 @@ async def test_duplicate_email_with_acknowledgement_proceeds(
 
     registrations = (await db_session.execute(select(Registration))).scalars().all()
     assert len(registrations) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("existing_state", "expected_status"),
+    [
+        (RegistrationState.PENDING_PAYMENT, 409),
+        (RegistrationState.WAITLISTED, 409),
+        (RegistrationState.FAILED, 201),
+        (RegistrationState.CANCELLED, 201),
+    ],
+)
+async def test_single_registration_duplicate_rule_respects_active_and_historical_states(
+    client,
+    db_session,
+    seeded_paid_published_event: Event,
+    existing_state: RegistrationState,
+    expected_status: int,
+) -> None:
+    phone_field = seeded_paid_published_event.field_definitions[0]
+    db_session.add(
+        Registration(
+            event_id=seeded_paid_published_event.id,
+            first_name="Existing",
+            last_name="Registrant",
+            email="amina.bello@example.com",
+            reg_id=f"TEC-2026-{existing_state.value[:3].upper()}001",
+            state=existing_state,
+            waitlist_position=1 if existing_state == RegistrationState.WAITLISTED else None,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.post(
+        f"/register/{seeded_paid_published_event.id}",
+        json={
+            "first_name": "Amina",
+            "last_name": "Bello",
+            "email": "amina.bello@example.com",
+            "acknowledge_duplicate": False,
+            "custom_field_values": [
+                {"field_definition_id": phone_field.id, "value": "+2348012345678"}
+            ],
+        },
+    )
+
+    assert response.status_code == expected_status
+    if expected_status == 409:
+        assert response.json() == {
+            "detail": "This email has already been used to register for this event.",
+            "duplicate_email": True,
+        }
+        assert (await db_session.execute(select(func.count(Registration.id)))).scalar_one() == 1
+    else:
+        assert response.json()["state"] == "pending_payment"
+        assert (await db_session.execute(select(func.count(Registration.id)))).scalar_one() == 2
 
 
 @pytest.mark.asyncio
@@ -642,7 +699,7 @@ async def test_full_event_with_waitlist_creates_waitlisted_registration(
 def test_registration_state_transition_rules() -> None:
     service = RegistrationService(session=None, settings=get_settings())  # type: ignore[arg-type]
     service.validate_state_transition(RegistrationState.PENDING_PAYMENT, RegistrationState.CONFIRMED)
-    service.validate_state_transition(RegistrationState.CONFIRMED, RegistrationState.REFUND_REQUESTED)
+    service.validate_state_transition(RegistrationState.CONFIRMED, RegistrationState.CANCELLED)
     service.validate_state_transition(RegistrationState.WAITLISTED, RegistrationState.PENDING_PAYMENT)
 
     with pytest.raises(RegistrationValidationError, match="Invalid registration state transition"):
@@ -850,3 +907,111 @@ async def test_cross_registration_duplicate_with_acknowledgement_proceeds(
     registrations = (await db_session.execute(select(Registration))).scalars().all()
     assert len(registrations) == 5
     assert sum(1 for registration in registrations if registration.email == "ngozi@example.com") == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("existing_state", "expected_status"),
+    [
+        (RegistrationState.PENDING_PAYMENT, 409),
+        (RegistrationState.WAITLISTED, 409),
+        (RegistrationState.FAILED, 201),
+        (RegistrationState.CANCELLED, 201),
+    ],
+)
+async def test_batch_duplicate_rule_respects_active_and_historical_states(
+    client,
+    db_session,
+    seeded_paid_published_event: Event,
+    existing_state: RegistrationState,
+    expected_status: int,
+) -> None:
+    phone_field = seeded_paid_published_event.field_definitions[0]
+    db_session.add(
+        Registration(
+            event_id=seeded_paid_published_event.id,
+            first_name="Existing",
+            last_name="Registrant",
+            email="ngozi@example.com",
+            reg_id=f"TEC-2026-B{existing_state.value[:2].upper()}001",
+            state=existing_state,
+            waitlist_position=1 if existing_state == RegistrationState.WAITLISTED else None,
+        )
+    )
+    await db_session.commit()
+
+    response = await client.post(
+        f"/register/{seeded_paid_published_event.id}/batch",
+        json=build_batch_payload(phone_field.id),
+    )
+
+    assert response.status_code == expected_status
+    if expected_status == 409:
+        assert response.json() == {
+            "detail": "One or more participants are already registered for this event. Re-submit with acknowledge_duplicates: true to proceed.",
+            "duplicate_emails": ["ngozi@example.com"],
+            "duplicate_warning": True,
+        }
+        assert (await db_session.execute(select(func.count(BatchRegistration.id)))).scalar_one() == 0
+        assert (await db_session.execute(select(func.count(Registration.id)))).scalar_one() == 1
+    else:
+        assert response.json()["state"] == "pending_payment"
+        assert (await db_session.execute(select(func.count(BatchRegistration.id)))).scalar_one() == 1
+        assert (await db_session.execute(select(func.count(Registration.id)))).scalar_one() == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("refund_status", "expected_status"),
+    [
+        (RefundRequestStatus.REQUESTED, 409),
+        (RefundRequestStatus.COMPLETED, 201),
+        (RefundRequestStatus.REJECTED, 201),
+    ],
+)
+async def test_batch_duplicate_rule_respects_refund_request_status(
+    client,
+    db_session,
+    seeded_paid_published_event: Event,
+    refund_status: RefundRequestStatus,
+    expected_status: int,
+) -> None:
+    phone_field = seeded_paid_published_event.field_definitions[0]
+    existing_registration = Registration(
+        event_id=seeded_paid_published_event.id,
+        first_name="Existing",
+        last_name="Registrant",
+        email="ngozi@example.com",
+        reg_id=f"TEC-2026-R{refund_status.value[:2].upper()}001",
+        state=RegistrationState.CANCELLED,
+    )
+    db_session.add(existing_registration)
+    await db_session.flush()
+    db_session.add(
+        RefundRequest(
+            registration_id=existing_registration.id,
+            status=refund_status,
+            requested_by=RefundRequestedBy.PUBLIC,
+            reason="Prior refund workflow",
+        )
+    )
+    await db_session.commit()
+
+    response = await client.post(
+        f"/register/{seeded_paid_published_event.id}/batch",
+        json=build_batch_payload(phone_field.id),
+    )
+
+    assert response.status_code == expected_status
+    if expected_status == 409:
+        assert response.json() == {
+            "detail": "One or more participants are already registered for this event. Re-submit with acknowledge_duplicates: true to proceed.",
+            "duplicate_emails": ["ngozi@example.com"],
+            "duplicate_warning": True,
+        }
+        assert (await db_session.execute(select(func.count(BatchRegistration.id)))).scalar_one() == 0
+        assert (await db_session.execute(select(func.count(Registration.id)))).scalar_one() == 1
+    else:
+        assert response.json()["state"] == "pending_payment"
+        assert (await db_session.execute(select(func.count(BatchRegistration.id)))).scalar_one() == 1
+        assert (await db_session.execute(select(func.count(Registration.id)))).scalar_one() == 5

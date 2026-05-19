@@ -82,6 +82,7 @@ class StaffRepository:
             .options(
                 selectinload(Registration.event),
                 selectinload(Registration.payment),
+                selectinload(Registration.payments),
                 selectinload(Registration.batch_registration),
                 selectinload(Registration.field_values).selectinload(RegistrationFieldValue.field_definition),
             )
@@ -96,6 +97,7 @@ class StaffRepository:
             .options(
                 selectinload(Registration.event),
                 selectinload(Registration.payment),
+                selectinload(Registration.payments),
                 selectinload(Registration.batch_registration),
                 selectinload(Registration.field_values).selectinload(RegistrationFieldValue.field_definition),
             )

@@ -18,6 +18,7 @@ from app.core.exceptions import (
 from app.core.security import utc_now
 from app.models.registration import Registration, RegistrationState
 from app.models.staff import StaffAccessMode, StaffAccount, StaffRole
+from app.repositories.event_repository import EventRepository
 from app.repositories.staff_repository import StaffRepository
 from app.schemas.staff import (
     StaffAccessConfigResponse,
@@ -42,6 +43,7 @@ class StaffService:
 
     def __post_init__(self) -> None:
         self.repository = StaffRepository(self.session)
+        self.event_repository = EventRepository(self.session)
 
     async def search_registrations(
         self,
@@ -69,8 +71,18 @@ class StaffService:
                 raise StaffAccessForbiddenError()
             registrations = accessible
 
+        capacity_override_counts = await self.event_repository.list_capacity_override_counts(
+            list({registration.event_id for registration in registrations})
+        )
+
         return StaffRegistrationSearchResponse(
-            registrations=[self._build_registration_result(registration) for registration in registrations],
+            registrations=[
+                self._build_registration_result(
+                    registration,
+                    capacity_override_count=capacity_override_counts.get(registration.event_id, 0),
+                )
+                for registration in registrations
+            ],
             total=len(registrations),
         )
 
@@ -237,7 +249,12 @@ class StaffService:
 
         return any(access_entry.event_id == event_id for access_entry in account.event_access_entries)
 
-    def _build_registration_result(self, registration: Registration) -> StaffRegistrationResult:
+    def _build_registration_result(
+        self,
+        registration: Registration,
+        *,
+        capacity_override_count: int,
+    ) -> StaffRegistrationResult:
         custom_field_values = [
             StaffRegistrationCustomFieldValueResponse(
                 label=field_value.field_definition.label,
@@ -275,6 +292,7 @@ class StaffService:
                 location=registration.event.location,
                 is_free=registration.event.is_free,
                 state=registration.event.state,
+                capacity_override_count=capacity_override_count,
             ),
             payment=payment,
         )

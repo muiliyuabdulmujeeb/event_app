@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.exceptions import EventConflictError, EventNotFoundError, EventValidationError
 from app.models.event import Event, EventFieldDefinition, EventState, OverflowRule
-from app.models.registration import RegistrationState
+from app.models.registration import CancellationReason, RegistrationState
 from app.models.staff import StaffAccount
 from app.repositories.event_repository import EventRepository, EventSummaryRow
+from app.repositories.registration_repository import RegistrationRepository
 from app.schemas.email import EmailMessage
 from app.schemas.event import (
     AdminEventDetailResponse,
@@ -19,6 +20,8 @@ from app.schemas.event import (
     EventCreateRequest,
     EventCustomFieldInput,
     EventCustomFieldResponse,
+    EventOverflowRuleUpdateRequest,
+    EventOverflowRuleUpdateResponse,
     EventRegistrationCountsResponse,
     EventStateUpdateRequest,
     EventUpdateRequest,
@@ -27,6 +30,7 @@ from app.schemas.event import (
     PublicEventSummaryResponse,
 )
 from app.schemas.notification import NotificationMethod, PriceChangeScope
+from app.services.event_authorization_service import EventAuthorizationService
 from app.services.notification_service import NotificationDispatchResult, NotificationService
 
 
@@ -51,6 +55,8 @@ class EventService:
 
     def __post_init__(self) -> None:
         self.repository = EventRepository(self.session)
+        self.registration_repository = RegistrationRepository(self.session)
+        self.authorization_service = EventAuthorizationService(self.session)
         self.notification_service = (
             NotificationService(self.session, self.settings)
             if self.settings is not None
@@ -100,6 +106,10 @@ class EventService:
 
         if payload.prefix is not None and payload.prefix != event.prefix:
             raise EventValidationError("Event prefix cannot be changed after creation.")
+        if payload.overflow_rule is not None:
+            raise EventValidationError(
+                "overflow_rule must be updated through /admin/events/{event_id}/overflow-rule."
+            )
 
         if payload.title is not None:
             event.title = payload.title
@@ -144,6 +154,44 @@ class EventService:
         return EventMutationResult(
             response=await self._build_admin_detail_response(event),
             email_messages=dispatch_result.email_messages,
+        )
+
+    async def update_overflow_rule(
+        self,
+        *,
+        actor: StaffAccount,
+        event_id: str,
+        payload: EventOverflowRuleUpdateRequest,
+    ) -> EventOverflowRuleUpdateResponse:
+        event = await self.authorization_service.require_overflow_rule_manager(
+            actor=actor,
+            event_id=event_id,
+        )
+        previous_rule = event.overflow_rule
+        normalized_rule = self._normalize_overflow_rule(event.capacity, payload.overflow_rule)
+        affected_waitlisted_registrations = 0
+
+        if previous_rule == OverflowRule.WAITLIST and normalized_rule == OverflowRule.HARD_REJECTION:
+            waitlisted_registrations = await self.registration_repository.list_registrations_for_event(
+                event.id,
+                states=[RegistrationState.WAITLISTED],
+                for_update=True,
+            )
+            affected_waitlisted_registrations = len(waitlisted_registrations)
+            for registration in waitlisted_registrations:
+                registration.state = RegistrationState.CANCELLED
+                registration.was_waitlisted = True
+                registration.previous_waitlist_position = registration.waitlist_position
+                registration.waitlist_position = None
+                registration.cancellation_reason = CancellationReason.OVERFLOW_RULE_CHANGED
+
+        event.overflow_rule = normalized_rule
+        await self.session.flush()
+        return EventOverflowRuleUpdateResponse(
+            event_id=event.id,
+            overflow_rule=event.overflow_rule,
+            affected_waitlisted_registrations=affected_waitlisted_registrations,
+            message="Overflow rule updated successfully.",
         )
 
     async def update_event_state(
@@ -216,14 +264,16 @@ class EventService:
 
     async def _build_admin_detail_response(self, event: Event) -> AdminEventDetailResponse:
         counts = await self.repository.get_registration_counts(event.id)
+        refund_counts = await self.repository.get_refund_request_counts(event.id)
+        capacity_override_counts = await self.repository.list_capacity_override_counts([event.id])
         registration_counts = EventRegistrationCountsResponse(
             total_registrations=sum(counts.values()),
             pending_payment=counts.get(RegistrationState.PENDING_PAYMENT.value, 0),
             confirmed=counts.get(RegistrationState.CONFIRMED.value, 0),
             failed=counts.get(RegistrationState.FAILED.value, 0),
             cancelled=counts.get(RegistrationState.CANCELLED.value, 0),
-            refund_requested=counts.get(RegistrationState.REFUND_REQUESTED.value, 0),
-            refunded=counts.get(RegistrationState.REFUNDED.value, 0),
+            refund_requested=refund_counts.get("requested", 0),
+            refunded=refund_counts.get("completed", 0),
             waitlisted=counts.get(RegistrationState.WAITLISTED.value, 0),
         )
         return AdminEventDetailResponse(
@@ -238,6 +288,7 @@ class EventService:
             capacity=event.capacity,
             overflow_rule=event.overflow_rule,
             state=event.state,
+            capacity_override_count=capacity_override_counts.get(event.id, 0),
             slots_remaining=self._compute_slots_remaining(event.capacity, registration_counts.confirmed),
             custom_fields=[EventCustomFieldResponse.model_validate(field) for field in event.field_definitions],
             registration_counts=registration_counts,
@@ -261,6 +312,7 @@ class EventService:
             state=event.state,
             registration_count=row.registration_count,
             confirmed_count=row.confirmed_count,
+            capacity_override_count=row.capacity_override_count,
             slots_remaining=self._compute_slots_remaining(event.capacity, row.confirmed_count),
             created_at=event.created_at,
             updated_at=event.updated_at,

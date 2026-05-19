@@ -14,6 +14,7 @@ from app.models.waitlist_promotion_offer import WaitlistPromotionOfferStatus
 from app.repositories.payment_repository import PaymentRepository
 from app.schemas.email import EmailMessage
 from app.services.email_templates import build_ticket_email_message
+from app.services.manual_review_service import ManualReviewService
 from app.services.notification_service import NotificationService
 
 
@@ -39,6 +40,7 @@ class PaymentProcessingService:
     def __post_init__(self) -> None:
         self.repository = PaymentRepository(self.session)
         self.notification_service = NotificationService(self.session, self.settings)
+        self.manual_review_service = ManualReviewService(self.session, self.settings)
 
     async def process_event(
         self,
@@ -138,6 +140,10 @@ class PaymentProcessingService:
         payment.paid_at = paid_at
         if payment.registration is not None and payment.registration.waitlist_promotion_offer is not None:
             payment.registration.waitlist_promotion_offer.status = WaitlistPromotionOfferStatus.MANUAL_REVIEW
+        await self.manual_review_service.create_late_payment_success_case(
+            payment=payment,
+            paid_at=paid_at.isoformat(),
+        )
         await self.notification_service.notify_manual_payment_review(
             payment=payment,
             paid_at=paid_at.isoformat(),

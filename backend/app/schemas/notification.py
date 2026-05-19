@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.models.event import EventState
 from app.models.payment import PaymentStatus
-from app.models.registration import RegistrationState
+from app.models.refund_request import RefundRequestStatus
+from app.models.registration import CancellationReason, RegistrationState
 from app.schemas.waitlist_promotion import RegistrationLookupPromotionOfferResponse
 
 
@@ -42,6 +43,9 @@ class RegistrationLookupRegistrationResponse(BaseModel):
     checked_in_at: datetime | None
     registered_at: datetime
     is_batch: bool
+    was_waitlisted: bool
+    previous_waitlist_position: int | None
+    cancellation_reason: CancellationReason | None
     custom_field_values: list[RegistrationLookupCustomFieldValueResponse]
 
 
@@ -61,6 +65,13 @@ class RegistrationLookupPaymentResponse(BaseModel):
     paid_at: datetime | None
 
 
+class RegistrationLookupRefundRequestResponse(BaseModel):
+    id: str
+    status: RefundRequestStatus
+    requested_at: datetime
+    processed_at: datetime | None
+
+
 class UserNotificationResponse(BaseModel):
     id: str
     title: str
@@ -74,41 +85,13 @@ class RegistrationLookupResponse(BaseModel):
     event: RegistrationLookupEventResponse
     payment: RegistrationLookupPaymentResponse | None
     promotion_offer: RegistrationLookupPromotionOfferResponse | None = None
+    refund_request: RegistrationLookupRefundRequestResponse | None = None
     notifications: list[UserNotificationResponse]
 
 
 class UserNotificationSeenResponse(BaseModel):
     id: str
     is_seen: bool
-
-
-class RegistrationRefundUpdateRequest(BaseModel):
-    state: RegistrationState
-    notification_method: NotificationMethod
-    message_body: str = Field(min_length=1)
-    title: str | None = Field(default=None, min_length=1, max_length=255)
-
-    @field_validator("message_body", "title")
-    @classmethod
-    def strip_text(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("must not be empty")
-        return stripped
-
-    @field_validator("state")
-    @classmethod
-    def validate_refund_state(cls, value: RegistrationState) -> RegistrationState:
-        if value not in {RegistrationState.REFUND_REQUESTED, RegistrationState.REFUNDED}:
-            raise ValueError("state must be one of: refund_requested, refunded")
-        return value
-
-
-class RegistrationRefundUpdateResponse(BaseModel):
-    reg_id: str
-    state: RegistrationState
 
 
 class AdminNotificationCreateRequest(BaseModel):

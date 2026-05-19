@@ -65,17 +65,19 @@ async def create_registration(
         )
 
     if with_successful_payment:
-        db_session.add(
-            Payment(
-                gateway=PaymentGateway.MOCK,
-                payment_reference=f"MOCK_{reg_id.replace('-', '')}",
-                amount=event.price,
-                currency="NGN",
-                status=PaymentStatus.SUCCESSFUL,
-                registration_id=registration.id,
-                paid_at=datetime(2026, 5, 16, 12, 0, tzinfo=timezone.utc),
-            )
+        payment = Payment(
+            gateway=PaymentGateway.MOCK,
+            payment_reference=f"MOCK_{reg_id.replace('-', '')}",
+            amount=event.price,
+            currency="NGN",
+            status=PaymentStatus.SUCCESSFUL,
+            registration_id=registration.id,
+            attempt_number=1,
+            paid_at=datetime(2026, 5, 16, 12, 0, tzinfo=timezone.utc),
         )
+        db_session.add(payment)
+        await db_session.flush()
+        registration.current_payment_id = payment.id
 
     await db_session.commit()
     await db_session.refresh(registration)
@@ -125,14 +127,15 @@ async def test_staff_can_search_by_reg_id(
             {"label": "Phone Number", "value": "+2348012345678"},
             {"label": "T-Shirt Size", "value": "L"},
         ],
-        "event": {
-            "id": seeded_paid_published_event.id,
-            "title": "Tech Conference 2026",
-            "event_date": "2026-08-20T10:00:00Z",
-            "location": "Lagos, Nigeria",
-            "is_free": False,
-            "state": "published",
-        },
+            "event": {
+                "id": seeded_paid_published_event.id,
+                "title": "Tech Conference 2026",
+                "event_date": "2026-08-20T10:00:00Z",
+                "location": "Lagos, Nigeria",
+                "is_free": False,
+                "state": "published",
+                "capacity_override_count": 0,
+            },
         "payment": {
             "status": "successful",
             "amount_paid": 5000,

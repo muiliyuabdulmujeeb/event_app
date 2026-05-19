@@ -38,6 +38,7 @@ class WaitlistPromotionRepository:
             .options(
                 selectinload(WaitlistPromotionOffer.registration).selectinload(Registration.event),
                 selectinload(WaitlistPromotionOffer.registration).selectinload(Registration.payment),
+                selectinload(WaitlistPromotionOffer.registration).selectinload(Registration.payments),
                 selectinload(WaitlistPromotionOffer.payment),
             )
         )
@@ -58,6 +59,7 @@ class WaitlistPromotionRepository:
             .options(
                 selectinload(WaitlistPromotionOffer.registration).selectinload(Registration.event),
                 selectinload(WaitlistPromotionOffer.registration).selectinload(Registration.payment),
+                selectinload(WaitlistPromotionOffer.registration).selectinload(Registration.payments),
                 selectinload(WaitlistPromotionOffer.payment),
             )
         )
@@ -76,6 +78,7 @@ class WaitlistPromotionRepository:
             .options(
                 selectinload(WaitlistPromotionOffer.registration).selectinload(Registration.event),
                 selectinload(WaitlistPromotionOffer.registration).selectinload(Registration.payment),
+                selectinload(WaitlistPromotionOffer.registration).selectinload(Registration.payments),
                 selectinload(WaitlistPromotionOffer.payment),
             )
             .with_for_update()

@@ -140,6 +140,26 @@ class EventUpdateRequest(BaseModel):
         return self
 
 
+class EventOverflowRuleUpdateRequest(BaseModel):
+    overflow_rule: OverflowRule
+    reason: str = Field(min_length=1)
+
+    @field_validator("reason")
+    @classmethod
+    def strip_reason(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be empty")
+        return stripped
+
+
+class EventOverflowRuleUpdateResponse(BaseModel):
+    event_id: str
+    overflow_rule: OverflowRule
+    affected_waitlisted_registrations: int
+    message: str
+
+
 class EventStateUpdateRequest(BaseModel):
     state: EventState
     notification_method: NotificationMethod | None = None
@@ -213,6 +233,7 @@ class AdminEventSummaryResponse(BaseModel):
     state: EventState
     registration_count: int
     confirmed_count: int
+    capacity_override_count: int
     slots_remaining: int | None
     created_at: datetime
     updated_at: datetime
@@ -235,6 +256,7 @@ class AdminEventDetailResponse(BaseModel):
     capacity: int | None
     overflow_rule: OverflowRule
     state: EventState
+    capacity_override_count: int
     slots_remaining: int | None
     custom_fields: list[EventCustomFieldResponse]
     registration_counts: EventRegistrationCountsResponse

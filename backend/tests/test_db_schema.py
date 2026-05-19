@@ -16,7 +16,7 @@ def test_initial_migration_applied(sync_engine) -> None:
     with sync_engine.connect() as connection:
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert revision == "20260517_01"
+    assert revision == "20260519_03"
 
 
 def test_expected_tables_exist(sync_engine) -> None:
@@ -27,13 +27,18 @@ def test_expected_tables_exist(sync_engine) -> None:
         "batch_registrations",
         "event_field_definitions",
         "events",
+        "exception_registration_offer_audits",
+        "exception_registration_offers",
+        "manual_review_cases",
         "payments",
         "refresh_tokens",
+        "refund_requests",
         "registration_field_values",
         "registrations",
         "staff_access_mode",
         "staff_accounts",
         "staff_event_access",
+        "staff_event_authorizations",
         "staff_notifications",
         "user_notifications",
         "waitlist_promotion_offers",
@@ -143,8 +148,11 @@ async def test_unique_constraints_for_registration_and_payment(db_session) -> No
         currency="NGN",
         status=PaymentStatus.SUCCESSFUL,
         registration_id=registration.id,
+        attempt_number=1,
     )
     db_session.add(payment)
+    await db_session.flush()
+    registration.current_payment_id = payment.id
     await db_session.commit()
     registration_id = registration.id
 
@@ -170,8 +178,25 @@ async def test_unique_constraints_for_registration_and_payment(db_session) -> No
         currency="NGN",
         status=PaymentStatus.PENDING,
         registration_id=registration_id,
+        attempt_number=2,
     )
     db_session.add(duplicate_payment)
 
     with pytest.raises(IntegrityError):
         await db_session.commit()
+
+    await db_session.rollback()
+
+    second_attempt = Payment(
+        gateway=PaymentGateway.MOCK,
+        payment_reference="MOCK_REF_002",
+        amount=5000,
+        currency="NGN",
+        status=PaymentStatus.PENDING,
+        registration_id=registration_id,
+        attempt_number=2,
+    )
+    db_session.add(second_attempt)
+    await db_session.flush()
+    registration.current_payment_id = second_attempt.id
+    await db_session.commit()

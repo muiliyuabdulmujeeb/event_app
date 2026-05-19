@@ -15,7 +15,9 @@ from app.schemas.registration import (
     RegistrationCreateResponse,
 )
 from app.services.email_service import EmailService
+from app.services.manual_review_service import ManualReviewService
 from app.services.registration_service import RegistrationService
+from app.schemas.manual_review import RegistrationPaymentInitializationResponse
 
 router = APIRouter(tags=["public-registrations"])
 
@@ -68,4 +70,24 @@ async def create_batch_registration(
         await session.rollback()
         if exc.extra:
             return error_response(exc)
+        raise as_http_exception(exc) from exc
+
+
+@router.post(
+    "/registrations/{reg_id}/payments/initialize",
+    response_model=RegistrationPaymentInitializationResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def initialize_registration_payment(
+    reg_id: str,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> RegistrationPaymentInitializationResponse:
+    service = ManualReviewService(session=session, settings=settings)
+    try:
+        response = await service.initialize_registration_payment(reg_id=reg_id)
+        await _commit_or_rollback(session)
+        return response
+    except AppError as exc:
+        await session.rollback()
         raise as_http_exception(exc) from exc

@@ -11,7 +11,9 @@ from app.db.base import Base, CreatedAtMixin, new_id
 
 if TYPE_CHECKING:
     from app.models.event import Event
+    from app.models.manual_review_case import ManualReviewCase
     from app.models.notification import StaffNotification
+    from app.models.staff_event_authorization import StaffEventAuthorization
 
 
 class StaffRole(str, enum.Enum):
@@ -53,6 +55,31 @@ class StaffAccount(Base, CreatedAtMixin):
     notifications: Mapped[list["StaffNotification"]] = relationship(
         back_populates="staff",
         cascade="all, delete-orphan",
+    )
+    event_authorizations: Mapped[list["StaffEventAuthorization"]] = relationship(
+        back_populates="staff",
+        cascade="all, delete-orphan",
+        foreign_keys="StaffEventAuthorization.staff_id",
+    )
+    granted_event_authorizations: Mapped[list["StaffEventAuthorization"]] = relationship(
+        back_populates="granted_by_account",
+        foreign_keys="StaffEventAuthorization.granted_by_staff_id",
+    )
+    revoked_event_authorizations: Mapped[list["StaffEventAuthorization"]] = relationship(
+        back_populates="revoked_by_account",
+        foreign_keys="StaffEventAuthorization.revoked_by_staff_id",
+    )
+    created_manual_review_cases: Mapped[list["ManualReviewCase"]] = relationship(
+        back_populates="created_by_staff",
+        foreign_keys="ManualReviewCase.created_by_staff_id",
+    )
+    assigned_manual_review_cases: Mapped[list["ManualReviewCase"]] = relationship(
+        back_populates="assigned_to_staff",
+        foreign_keys="ManualReviewCase.assigned_to_staff_id",
+    )
+    resolved_manual_review_cases: Mapped[list["ManualReviewCase"]] = relationship(
+        back_populates="resolved_by_staff",
+        foreign_keys="ManualReviewCase.resolved_by_staff_id",
     )
 
 
@@ -106,4 +133,6 @@ class RefreshToken(Base, CreatedAtMixin):
 
 
 from app.models.event import Event  # noqa: E402
+from app.models.manual_review_case import ManualReviewCase  # noqa: E402
 from app.models.notification import StaffNotification  # noqa: E402
+from app.models.staff_event_authorization import StaffEventAuthorization  # noqa: E402

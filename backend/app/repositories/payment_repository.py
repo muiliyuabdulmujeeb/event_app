@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -20,6 +20,14 @@ class PaymentRepository:
         await self.session.flush()
         return payment
 
+    async def get_next_registration_attempt_number(self, registration_id: str) -> int:
+        result = await self.session.execute(
+            select(func.coalesce(func.max(Payment.attempt_number), 0) + 1).where(
+                Payment.registration_id == registration_id
+            )
+        )
+        return int(result.scalar_one())
+
     async def get_by_reference(
         self,
         reference: str,
@@ -31,10 +39,18 @@ class PaymentRepository:
             .where(Payment.payment_reference == reference)
             .options(
                 selectinload(Payment.registration).selectinload(Registration.event),
+                selectinload(Payment.registration).selectinload(Registration.payment),
+                selectinload(Payment.registration).selectinload(Registration.payments),
                 selectinload(Payment.registration).selectinload(Registration.waitlist_promotion_offer),
                 selectinload(Payment.batch_registration)
                 .selectinload(BatchRegistration.registrations)
                 .selectinload(Registration.event),
+                selectinload(Payment.batch_registration)
+                .selectinload(BatchRegistration.registrations)
+                .selectinload(Registration.payment),
+                selectinload(Payment.batch_registration)
+                .selectinload(BatchRegistration.registrations)
+                .selectinload(Registration.payments),
                 selectinload(Payment.batch_registration)
                 .selectinload(BatchRegistration.registrations)
                 .selectinload(Registration.waitlist_promotion_offer),
@@ -50,12 +66,21 @@ class PaymentRepository:
         query = (
             select(Payment)
             .where(Payment.status == PaymentStatus.PENDING)
+            .order_by(Payment.created_at.asc(), Payment.id.asc())
             .options(
                 selectinload(Payment.registration).selectinload(Registration.event),
+                selectinload(Payment.registration).selectinload(Registration.payment),
+                selectinload(Payment.registration).selectinload(Registration.payments),
                 selectinload(Payment.registration).selectinload(Registration.waitlist_promotion_offer),
                 selectinload(Payment.batch_registration)
                 .selectinload(BatchRegistration.registrations)
                 .selectinload(Registration.event),
+                selectinload(Payment.batch_registration)
+                .selectinload(BatchRegistration.registrations)
+                .selectinload(Registration.payment),
+                selectinload(Payment.batch_registration)
+                .selectinload(BatchRegistration.registrations)
+                .selectinload(Registration.payments),
                 selectinload(Payment.batch_registration)
                 .selectinload(BatchRegistration.registrations)
                 .selectinload(Registration.waitlist_promotion_offer),
@@ -94,5 +119,13 @@ class PaymentRepository:
                 Registration.state == RegistrationState.PENDING_PAYMENT,
             )
             .order_by(Registration.registered_at)
+        )
+        return list(result.scalars().all())
+
+    async def list_registration_payments(self, registration_id: str) -> list[Payment]:
+        result = await self.session.execute(
+            select(Payment)
+            .where(Payment.registration_id == registration_id)
+            .order_by(Payment.attempt_number.asc(), Payment.created_at.asc(), Payment.id.asc())
         )
         return list(result.scalars().all())

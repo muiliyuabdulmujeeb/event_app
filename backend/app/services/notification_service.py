@@ -9,11 +9,11 @@ from app.core.security import utc_now
 from app.core.exceptions import (
     EventNotFoundError,
     RegistrationNotFoundError,
-    RegistrationValidationError,
     UserNotificationNotFoundError,
 )
 from app.models.event import Event, OverflowRule
 from app.models.payment import Payment
+from app.models.refund_request import RefundRequest
 from app.models.registration import Registration, RegistrationState
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.registration_repository import RegistrationRepository
@@ -27,10 +27,9 @@ from app.schemas.notification import (
     RegistrationLookupEventResponse,
     RegistrationLookupPaymentResponse,
     RegistrationLookupPromotionOfferResponse,
+    RegistrationLookupRefundRequestResponse,
     RegistrationLookupRegistrationResponse,
     RegistrationLookupResponse,
-    RegistrationRefundUpdateRequest,
-    RegistrationRefundUpdateResponse,
     UserNotificationResponse,
     UserNotificationSeenResponse,
 )
@@ -40,9 +39,9 @@ from app.models.waitlist_promotion_offer import WaitlistPromotionOffer, Waitlist
 
 DEFAULT_EVENT_CANCELLATION_TITLE = "Event Cancelled"
 DEFAULT_PRICE_CHANGE_TITLE = "Price Updated"
-DEFAULT_REFUND_REQUESTED_TITLE = "Refund Requested"
 DEFAULT_REFUND_PROCESSED_TITLE = "Refund Processed"
 DEFAULT_MANUAL_PAYMENT_REVIEW_TITLE = "Manual Payment Review Required"
+DEFAULT_PAYMENT_RETRY_TITLE = "Payment Retry Available"
 
 
 @dataclass(frozen=True)
@@ -50,13 +49,6 @@ class NotificationDispatchResult:
     user_notifications_created: int = 0
     staff_notifications_created: int = 0
     email_messages: list[EmailMessage] = field(default_factory=list)
-
-
-@dataclass(frozen=True)
-class RegistrationRefundServiceResult:
-    response: RegistrationRefundUpdateResponse
-    email_messages: list[EmailMessage] = field(default_factory=list)
-    promoted_ticket_email_messages: list[EmailMessage] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -101,6 +93,7 @@ class NotificationService:
                 else None
             ),
             promotion_offer=self._build_lookup_promotion_offer(registration.waitlist_promotion_offer),
+            refund_request=self._build_lookup_refund_request(registration.refund_requests[0] if registration.refund_requests else None),
             notifications=[
                 UserNotificationResponse(
                     id=notification.id,
@@ -122,56 +115,6 @@ class NotificationService:
         await self.session.flush()
         return UserNotificationSeenResponse(id=notification.id, is_seen=notification.is_seen)
 
-    async def apply_refund_update(
-        self,
-        *,
-        reg_id: str,
-        payload: RegistrationRefundUpdateRequest,
-    ) -> RegistrationRefundServiceResult:
-        registration = await self.registration_repository.get_registration_by_reg_id(reg_id, for_update=True)
-        if registration is None:
-            raise RegistrationNotFoundError("No registration found for the provided reg_id.")
-
-        self._validate_refund_transition(registration.state, payload.state)
-        previous_state = registration.state
-        registration.state = payload.state
-        await self.session.flush()
-
-        title = payload.title or self._default_refund_title(payload.state)
-        email_messages: list[EmailMessage] = []
-        if payload.notification_method == NotificationMethod.IN_APP:
-            await self.notification_repository.create_user_notification(
-                reg_id=registration.reg_id,
-                title=title,
-                body=payload.message_body,
-            )
-            staff_count = await self._create_staff_notifications_for_active_accounts(title=title, body=payload.message_body)
-        else:
-            email_messages = [
-                self._build_custom_email_message(
-                    to=[registration.email],
-                    subject=title,
-                    body=payload.message_body,
-                    metadata={
-                        "template": "admin_notification",
-                        "notification_type": AdminNotificationType.REFUND.value,
-                        "reg_id": registration.reg_id,
-                    },
-                )
-            ]
-            staff_count = 0
-
-        promoted_ticket_email_messages = await self._promote_next_waitlisted_registration_if_needed(
-            event=registration.event,
-            released_from_confirmed=previous_state == RegistrationState.CONFIRMED,
-        )
-
-        return RegistrationRefundServiceResult(
-            response=RegistrationRefundUpdateResponse(reg_id=registration.reg_id, state=registration.state),
-            email_messages=email_messages,
-            promoted_ticket_email_messages=promoted_ticket_email_messages,
-        )
-
     async def dispatch_admin_notification(
         self,
         payload: AdminNotificationCreateRequest,
@@ -180,7 +123,7 @@ class NotificationService:
             registration = await self.registration_repository.get_registration_by_reg_id(payload.reg_id or "")
             if registration is None:
                 raise RegistrationNotFoundError("No registration found for the provided reg_id.")
-            dispatch_result = await self._dispatch_refund_notification_only(
+            dispatch_result = await self.dispatch_refund_notification(
                 registration=registration,
                 method=payload.notification_method,
                 title=payload.title or DEFAULT_REFUND_PROCESSED_TITLE,
@@ -304,25 +247,7 @@ class NotificationService:
             email_messages=email_messages,
         )
 
-    async def notify_manual_payment_review(
-        self,
-        *,
-        payment: Payment,
-        paid_at: str | None = None,
-    ) -> None:
-        owner = payment.registration.reg_id if payment.registration is not None else payment.batch_id
-        owner_label = "registration" if payment.registration is not None else "batch"
-        paid_at_suffix = f" at {paid_at}" if paid_at is not None else ""
-        body = (
-            f"Payment reference {payment.payment_reference} reported success{paid_at_suffix} after the original "
-            f"payment window had already been closed. Review the affected {owner_label} ({owner}) manually."
-        )
-        await self._create_staff_notifications_for_active_accounts(
-            title=DEFAULT_MANUAL_PAYMENT_REVIEW_TITLE,
-            body=body,
-        )
-
-    async def _dispatch_refund_notification_only(
+    async def dispatch_refund_notification(
         self,
         *,
         registration: Registration,
@@ -336,10 +261,9 @@ class NotificationService:
                 title=title,
                 body=body,
             )
-            staff_count = await self._create_staff_notifications_for_active_accounts(title=title, body=body)
             return NotificationDispatchResult(
                 user_notifications_created=user_count,
-                staff_notifications_created=staff_count,
+                staff_notifications_created=0,
                 email_messages=[],
             )
 
@@ -358,6 +282,70 @@ class NotificationService:
                     },
                 )
             ],
+        )
+
+    async def promote_next_waitlisted_registration_if_needed(
+        self,
+        *,
+        event: Event,
+        released_from_confirmed: bool,
+    ) -> list[EmailMessage]:
+        return await self._promote_next_waitlisted_registration_if_needed(
+            event=event,
+            released_from_confirmed=released_from_confirmed,
+        )
+
+    async def notify_manual_payment_review(
+        self,
+        *,
+        payment: Payment,
+        paid_at: str | None = None,
+    ) -> None:
+        owner = payment.registration.reg_id if payment.registration is not None else payment.batch_id
+        owner_label = "registration" if payment.registration is not None else "batch"
+        paid_at_suffix = f" at {paid_at}" if paid_at is not None else ""
+        body = (
+            f"Payment reference {payment.payment_reference} reported success{paid_at_suffix} after the original "
+            f"payment window had already been closed. Review the affected {owner_label} ({owner}) manually."
+        )
+        await self._create_staff_notifications_for_active_accounts(
+            title=DEFAULT_MANUAL_PAYMENT_REVIEW_TITLE,
+            body=body,
+        )
+
+    async def dispatch_payment_retry_notification(
+        self,
+        *,
+        registration: Registration,
+        title: str = DEFAULT_PAYMENT_RETRY_TITLE,
+    ) -> NotificationDispatchResult:
+        payment_action_url = (
+            f"{self.settings.application_base_url.rstrip('/')}"
+            f"/registrations/{registration.reg_id}/payments/initialize"
+        )
+        body = (
+            "A new payment attempt is available for your registration. "
+            f"Use this link to continue payment: {payment_action_url}"
+        )
+        user_notifications_created = await self._create_user_notifications_for_registrations(
+            registrations=[registration],
+            title=title,
+            body=body,
+        )
+        email_message = self._build_custom_email_message(
+            to=[registration.email],
+            subject=title,
+            body=body,
+            metadata={
+                "template": "payment_retry",
+                "reg_id": registration.reg_id,
+                "event_id": registration.event_id,
+            },
+        )
+        return NotificationDispatchResult(
+            user_notifications_created=user_notifications_created,
+            staff_notifications_created=0,
+            email_messages=[email_message],
         )
 
     async def _create_user_notifications_for_registrations(
@@ -439,6 +427,9 @@ class NotificationService:
             checked_in_at=registration.checked_in_at,
             registered_at=registration.registered_at,
             is_batch=registration.batch_id is not None,
+            was_waitlisted=registration.was_waitlisted,
+            previous_waitlist_position=registration.previous_waitlist_position,
+            cancellation_reason=registration.cancellation_reason,
             custom_field_values=custom_field_values,
         )
 
@@ -465,6 +456,19 @@ class NotificationService:
             status=offer.status,
             offer_expires_at=offer.offer_expires_at,
             payment_action_url=payment_action_url,
+        )
+
+    def _build_lookup_refund_request(
+        self,
+        refund_request: RefundRequest | None,
+    ) -> RegistrationLookupRefundRequestResponse | None:
+        if refund_request is None:
+            return None
+        return RegistrationLookupRefundRequestResponse(
+            id=refund_request.id,
+            status=refund_request.status,
+            requested_at=refund_request.requested_at,
+            processed_at=refund_request.processed_at,
         )
 
     def _build_bulk_event_email_messages(
@@ -508,22 +512,4 @@ class NotificationService:
             text_body=body,
             html_body=html_body,
             metadata=metadata,
-        )
-
-    def _default_refund_title(self, state: RegistrationState) -> str:
-        if state == RegistrationState.REFUND_REQUESTED:
-            return DEFAULT_REFUND_REQUESTED_TITLE
-        return DEFAULT_REFUND_PROCESSED_TITLE
-
-    def _validate_refund_transition(
-        self,
-        current_state: RegistrationState,
-        next_state: RegistrationState,
-    ) -> None:
-        if current_state == RegistrationState.CONFIRMED and next_state == RegistrationState.REFUND_REQUESTED:
-            return
-        if current_state == RegistrationState.REFUND_REQUESTED and next_state == RegistrationState.REFUNDED:
-            return
-        raise RegistrationValidationError(
-            f"Invalid registration state transition from '{current_state.value}' to '{next_state.value}'."
         )

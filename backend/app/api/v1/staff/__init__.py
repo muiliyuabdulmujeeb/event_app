@@ -8,15 +8,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.dependencies import get_app_settings, get_current_account, get_db_session
 from app.core.exceptions import AppError, as_http_exception
+from app.models.manual_review_case import ManualReviewCaseStatus, ManualReviewCaseType
 from app.models.staff import StaffAccount
+from app.repositories.manual_review_repository import ManualReviewCaseFilters
 from app.schemas.staff import (
     StaffCheckInResponse,
     StaffNotificationListResponse,
     StaffNotificationReadResponse,
     StaffRegistrationSearchResponse,
 )
+from app.schemas.manual_review import (
+    ManualReviewCaseListResponse,
+    ManualReviewCaseResponse,
+    ManualReviewCaseUpdateRequest,
+    RequeueRegistrationRequest,
+    RequeueRegistrationResponse,
+)
 from app.schemas.waitlist_promotion import WaitlistPromotionRequest, WaitlistPromotionResponse
 from app.services.email_service import EmailService
+from app.services.manual_review_service import ManualReviewService
 from app.services.staff_service import StaffService
 from app.services.waitlist_promotion_service import WaitlistPromotionService
 
@@ -121,6 +131,85 @@ async def mark_staff_notification_read(
         response = await service.mark_notification_read(actor=account, notification_id=notification_id)
         await _commit_or_rollback(session)
         return response
+    except AppError as exc:
+        await session.rollback()
+        raise as_http_exception(exc) from exc
+
+
+@router.get("/manual-reviews", response_model=ManualReviewCaseListResponse)
+async def list_manual_review_cases(
+    account: Annotated[StaffAccount, Depends(get_current_account)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+    status: Annotated[ManualReviewCaseStatus | None, Query()] = None,
+    case_type: Annotated[ManualReviewCaseType | None, Query()] = None,
+    event_id: Annotated[str | None, Query()] = None,
+    registration_id: Annotated[str | None, Query()] = None,
+    payment_id: Annotated[str | None, Query()] = None,
+) -> ManualReviewCaseListResponse:
+    service = ManualReviewService(session=session, settings=settings)
+    try:
+        return await service.list_cases(
+            actor=account,
+            filters=ManualReviewCaseFilters(
+                status=status,
+                case_type=case_type,
+                event_id=event_id,
+                registration_id=registration_id,
+                payment_id=payment_id,
+            ),
+        )
+    except AppError as exc:
+        raise as_http_exception(exc) from exc
+
+
+@router.get("/manual-reviews/{case_id}", response_model=ManualReviewCaseResponse)
+async def get_manual_review_case(
+    case_id: str,
+    account: Annotated[StaffAccount, Depends(get_current_account)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> ManualReviewCaseResponse:
+    service = ManualReviewService(session=session, settings=settings)
+    try:
+        return await service.get_case(actor=account, case_id=case_id)
+    except AppError as exc:
+        raise as_http_exception(exc) from exc
+
+
+@router.patch("/manual-reviews/{case_id}", response_model=ManualReviewCaseResponse, status_code=status.HTTP_200_OK)
+async def update_manual_review_case(
+    case_id: str,
+    payload: ManualReviewCaseUpdateRequest,
+    account: Annotated[StaffAccount, Depends(get_current_account)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> ManualReviewCaseResponse:
+    service = ManualReviewService(session=session, settings=settings)
+    try:
+        response = await service.update_case(actor=account, case_id=case_id, payload=payload)
+        await _commit_or_rollback(session)
+        return response
+    except AppError as exc:
+        await session.rollback()
+        raise as_http_exception(exc) from exc
+
+
+@router.patch("/registrations/{reg_id}/requeue", response_model=RequeueRegistrationResponse, status_code=status.HTTP_200_OK)
+async def requeue_registration(
+    reg_id: str,
+    payload: RequeueRegistrationRequest,
+    account: Annotated[StaffAccount, Depends(get_current_account)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> RequeueRegistrationResponse:
+    service = ManualReviewService(session=session, settings=settings)
+    email_service = EmailService(settings=settings)
+    try:
+        result = await service.requeue_registration(actor=account, reg_id=reg_id, payload=payload)
+        await _commit_or_rollback(session)
+        email_service.enqueue_messages(result.email_messages)
+        return result.response
     except AppError as exc:
         await session.rollback()
         raise as_http_exception(exc) from exc
