@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from app.api.v1.admin.analytics import router as admin_analytics_router
 from app.api.v1.admin.events import router as admin_events_router
 from app.api.v1.admin.notifications import router as admin_notifications_router
 from app.api.v1.admin.registrations import router as admin_registrations_router
@@ -22,6 +23,7 @@ api_router.include_router(admin_staff_router)
 api_router.include_router(admin_events_router)
 api_router.include_router(admin_registrations_router)
 api_router.include_router(admin_notifications_router)
+api_router.include_router(admin_analytics_router)
 api_router.include_router(payments_router)
 api_router.include_router(staff_router)
 api_router.include_router(public_events_router)
