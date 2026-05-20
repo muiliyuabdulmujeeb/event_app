@@ -1,0 +1,17 @@
+.env
+.env.*
+.git
+.gitignore
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+.coverage
+htmlcov/
+celerybeat-schedule
+celerybeat-schedule.*
+tests/
+README.md
+docs/
+*.pyc
