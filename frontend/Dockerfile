@@ -2,10 +2,10 @@ FROM node:20-alpine AS build
 
 WORKDIR /frontend
 
-COPY package.json tsconfig.json vite.config.ts index.html ./
+COPY package.json package-lock.json tsconfig.json vite.config.ts index.html ./
 COPY src ./src
 COPY .env.example ./frontend.env.example
-RUN npm install
+RUN npm ci
 RUN npm run build
 
 FROM nginx:1.27-alpine
