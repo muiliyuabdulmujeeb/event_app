@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, CreatedAtMixin, new_id
 
 if TYPE_CHECKING:
+    from app.models.async_task_failure import AsyncTaskFailure
     from app.models.event import Event
     from app.models.manual_review_case import ManualReviewCase
     from app.models.notification import StaffNotification
@@ -81,6 +82,14 @@ class StaffAccount(Base, CreatedAtMixin):
         back_populates="resolved_by_staff",
         foreign_keys="ManualReviewCase.resolved_by_staff_id",
     )
+    acknowledged_async_task_failures: Mapped[list["AsyncTaskFailure"]] = relationship(
+        back_populates="acknowledged_by_account",
+        foreign_keys="AsyncTaskFailure.acknowledged_by_staff_id",
+    )
+    resolved_async_task_failures: Mapped[list["AsyncTaskFailure"]] = relationship(
+        back_populates="resolved_by_account",
+        foreign_keys="AsyncTaskFailure.resolved_by_staff_id",
+    )
 
 
 class StaffAccessModeRecord(Base):
@@ -132,6 +141,7 @@ class RefreshToken(Base, CreatedAtMixin):
     staff: Mapped["StaffAccount"] = relationship(back_populates="refresh_tokens")
 
 
+from app.models.async_task_failure import AsyncTaskFailure  # noqa: E402
 from app.models.event import Event  # noqa: E402
 from app.models.manual_review_case import ManualReviewCase  # noqa: E402
 from app.models.notification import StaffNotification  # noqa: E402

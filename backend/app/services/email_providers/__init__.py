@@ -28,14 +28,14 @@ def _discover_providers() -> None:
     _DISCOVERED = True
 
 
-def build_email_provider(settings: Settings) -> EmailProvider:
+def build_email_provider(settings: Settings, provider_name: str | None = None) -> EmailProvider:
     _discover_providers()
-    provider_name = settings.email_provider.strip().lower()
-    provider_cls = get_registered_provider(provider_name)
+    resolved_provider_name = (provider_name or settings.email_provider).strip().lower()
+    provider_cls = get_registered_provider(resolved_provider_name)
     if provider_cls is None:
         supported = ", ".join(sorted(list_registered_providers()))
         raise EmailConfigurationError(
-            f"EMAIL_PROVIDER '{settings.email_provider}' is not supported. Supported providers: {supported}."
+            f"EMAIL_PROVIDER '{provider_name or settings.email_provider}' is not supported. Supported providers: {supported}."
         )
     return provider_cls(settings)
 

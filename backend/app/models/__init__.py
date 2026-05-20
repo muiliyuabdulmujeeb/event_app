@@ -1,5 +1,6 @@
 """SQLAlchemy models package."""
 
+from app.models.async_task_failure import AsyncTaskFailure, AsyncTaskFailureStatus, AsyncTaskType
 from app.models.event import Event, EventFieldDefinition, EventState, FieldType, OverflowRule
 from app.models.exception_registration_offer import (
     ExceptionRegistrationOffer,
@@ -37,6 +38,9 @@ from app.models.staff_event_authorization import StaffEventAuthorization
 from app.models.waitlist_promotion_offer import WaitlistPromotionOffer, WaitlistPromotionOfferStatus
 
 __all__ = [
+    "AsyncTaskFailure",
+    "AsyncTaskFailureStatus",
+    "AsyncTaskType",
     "BatchRegistration",
     "Event",
     "EventFieldDefinition",

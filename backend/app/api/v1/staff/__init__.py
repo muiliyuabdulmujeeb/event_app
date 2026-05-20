@@ -8,9 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.dependencies import get_app_settings, get_current_account, get_db_session
 from app.core.exceptions import AppError, as_http_exception
+from app.models.async_task_failure import AsyncTaskFailureStatus, AsyncTaskType
 from app.models.manual_review_case import ManualReviewCaseStatus, ManualReviewCaseType
 from app.models.staff import StaffAccount
+from app.repositories.async_task_failure_repository import AsyncTaskFailureFilters
 from app.repositories.manual_review_repository import ManualReviewCaseFilters
+from app.schemas.async_task_failure import AsyncTaskFailureListResponse, AsyncTaskFailureResponse
+from app.schemas.async_task_failure import AsyncTaskFailureUpdateRequest
 from app.schemas.staff import (
     StaffCheckInResponse,
     StaffNotificationListResponse,
@@ -25,6 +29,7 @@ from app.schemas.manual_review import (
     RequeueRegistrationResponse,
 )
 from app.schemas.waitlist_promotion import WaitlistPromotionRequest, WaitlistPromotionResponse
+from app.services.async_task_failure_service import AsyncTaskFailureService
 from app.services.email_service import EmailService
 from app.services.manual_review_service import ManualReviewService
 from app.services.staff_service import StaffService
@@ -117,6 +122,62 @@ async def list_staff_notifications(
     try:
         return await service.list_unread_notifications(actor=account)
     except AppError as exc:
+        raise as_http_exception(exc) from exc
+
+
+@router.get("/dead-letters", response_model=AsyncTaskFailureListResponse)
+async def list_async_task_failures(
+    account: Annotated[StaffAccount, Depends(get_current_account)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    task_type: Annotated[AsyncTaskType | None, Query()] = None,
+    status: Annotated[AsyncTaskFailureStatus | None, Query()] = None,
+    event_id: Annotated[str | None, Query()] = None,
+    registration_id: Annotated[str | None, Query()] = None,
+    payment_id: Annotated[str | None, Query()] = None,
+) -> AsyncTaskFailureListResponse:
+    service = AsyncTaskFailureService(session=session)
+    try:
+        return await service.list_failures(
+            actor=account,
+            filters=AsyncTaskFailureFilters(
+                task_type=task_type,
+                status=status,
+                event_id=event_id,
+                registration_id=registration_id,
+                payment_id=payment_id,
+            ),
+        )
+    except AppError as exc:
+        raise as_http_exception(exc) from exc
+
+
+@router.get("/dead-letters/{dead_letter_id}", response_model=AsyncTaskFailureResponse)
+async def get_async_task_failure(
+    dead_letter_id: str,
+    account: Annotated[StaffAccount, Depends(get_current_account)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AsyncTaskFailureResponse:
+    service = AsyncTaskFailureService(session=session)
+    try:
+        return await service.get_failure(actor=account, failure_id=dead_letter_id)
+    except AppError as exc:
+        raise as_http_exception(exc) from exc
+
+
+@router.patch("/dead-letters/{dead_letter_id}", response_model=AsyncTaskFailureResponse, status_code=status.HTTP_200_OK)
+async def update_async_task_failure(
+    dead_letter_id: str,
+    payload: AsyncTaskFailureUpdateRequest,
+    account: Annotated[StaffAccount, Depends(get_current_account)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AsyncTaskFailureResponse:
+    service = AsyncTaskFailureService(session=session)
+    try:
+        response = await service.update_failure(actor=account, failure_id=dead_letter_id, payload=payload)
+        await _commit_or_rollback(session)
+        return response
+    except AppError as exc:
+        await session.rollback()
         raise as_http_exception(exc) from exc
 
 

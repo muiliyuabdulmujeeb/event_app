@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, CreatedAtMixin, UpdatedAtMixin, new_id
 
 if TYPE_CHECKING:
+    from app.models.async_task_failure import AsyncTaskFailure
     from app.models.manual_review_case import ManualReviewCase
     from app.models.registration import BatchRegistration, Registration
     from app.models.waitlist_promotion_offer import WaitlistPromotionOffer
@@ -72,8 +73,10 @@ class Payment(Base, CreatedAtMixin, UpdatedAtMixin):
         uselist=False,
     )
     manual_review_cases: Mapped[list["ManualReviewCase"]] = relationship(back_populates="payment")
+    async_task_failures: Mapped[list["AsyncTaskFailure"]] = relationship(back_populates="payment")
 
 
+from app.models.async_task_failure import AsyncTaskFailure  # noqa: E402
 from app.models.manual_review_case import ManualReviewCase  # noqa: E402
 from app.models.registration import BatchRegistration, Registration  # noqa: E402
 from app.models.waitlist_promotion_offer import WaitlistPromotionOffer  # noqa: E402

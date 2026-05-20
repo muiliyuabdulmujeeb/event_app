@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     application_base_url: str = Field("http://localhost:8000", alias="APPLICATION_BASE_URL")
     waitlist_promotion_default_expiry_minutes: int = Field(30, alias="WAITLIST_PROMOTION_DEFAULT_EXPIRY_MINUTES")
     email_provider: str = Field("console", alias="EMAIL_PROVIDER")
+    email_provider_failover_chain: str = Field(
+        "resend,zoho_mail,sendgrid,mailgun,amazon_ses",
+        alias="EMAIL_PROVIDER_FAILOVER_CHAIN",
+    )
+    email_provider_attempts_per_provider: int = Field(2, alias="EMAIL_PROVIDER_ATTEMPTS_PER_PROVIDER", ge=1)
     email_api_key: str = Field("", alias="EMAIL_API_KEY")
     email_from: str = Field("noreply@eventapp.local", alias="EMAIL_FROM")
     email_from_name: str = Field("Event Management", alias="EMAIL_FROM_NAME")

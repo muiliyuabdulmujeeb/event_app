@@ -157,6 +157,10 @@ class EmailDeliveryError(BadGatewayError):
     detail = "Email delivery failed."
 
 
+class EmailMessageValidationError(EmailDeliveryError):
+    detail = "Email payload is invalid for the selected provider."
+
+
 class PaymentNotFoundError(NotFoundError):
     detail = "Payment not found."
 
@@ -219,6 +223,18 @@ class ManualReviewCaseForbiddenError(AuthorizationError):
 
 class ManualReviewCaseNotFoundError(NotFoundError):
     detail = "Manual review case not found."
+
+
+class AsyncTaskFailureForbiddenError(AuthorizationError):
+    pass
+
+
+class AsyncTaskFailureValidationError(ValidationError):
+    pass
+
+
+class AsyncTaskFailureNotFoundError(NotFoundError):
+    detail = "Dead-letter entry not found."
 
 
 class DuplicateRegistrationError(RegistrationConflictError):

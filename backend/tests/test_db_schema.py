@@ -16,7 +16,7 @@ def test_initial_migration_applied(sync_engine) -> None:
     with sync_engine.connect() as connection:
         revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
 
-    assert revision == "20260519_03"
+    assert revision == "20260520_01"
 
 
 def test_expected_tables_exist(sync_engine) -> None:
@@ -24,6 +24,7 @@ def test_expected_tables_exist(sync_engine) -> None:
     table_names = set(inspector.get_table_names())
 
     expected_tables = {
+        "async_task_failures",
         "batch_registrations",
         "event_field_definitions",
         "events",
@@ -46,6 +47,19 @@ def test_expected_tables_exist(sync_engine) -> None:
 
     assert expected_tables.issubset(table_names)
     assert "waitlist" not in table_names
+
+
+def test_async_task_failures_table_includes_operational_dead_letter_columns(sync_engine) -> None:
+    inspector = inspect(sync_engine)
+    columns = {column["name"] for column in inspector.get_columns("async_task_failures")}
+
+    assert {
+        "acknowledged_by_staff_id",
+        "acknowledged_at",
+        "resolved_by_staff_id",
+        "resolved_at",
+        "resolution_notes",
+    }.issubset(columns)
 
 
 @pytest.mark.asyncio

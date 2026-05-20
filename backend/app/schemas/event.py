@@ -196,7 +196,6 @@ class PublicEventSummaryResponse(BaseModel):
     is_free: bool
     state: EventState
     capacity: int | None
-    slots_remaining: int | None
 
 
 class PublicEventListResponse(BaseModel):

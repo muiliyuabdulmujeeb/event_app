@@ -240,8 +240,6 @@ class EventService:
         if event is None:
             raise EventNotFoundError("Event not found.")
 
-        counts = await self.repository.get_registration_counts(event.id)
-        confirmed_count = counts.get(RegistrationState.CONFIRMED.value, 0)
         return PublicEventDetailResponse(
             id=event.id,
             title=event.title,
@@ -252,7 +250,6 @@ class EventService:
             is_free=event.is_free,
             state=event.state,
             capacity=event.capacity,
-            slots_remaining=self._compute_slots_remaining(event.capacity, confirmed_count),
             custom_fields=[EventCustomFieldResponse.model_validate(field) for field in event.field_definitions],
         )
 
@@ -330,7 +327,6 @@ class EventService:
             is_free=event.is_free,
             state=event.state,
             capacity=event.capacity,
-            slots_remaining=self._compute_slots_remaining(event.capacity, row.confirmed_count),
         )
 
     def _build_field_definitions(self, custom_fields: list[EventCustomFieldInput]) -> list[EventFieldDefinition]:

@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, CreatedAtMixin, UpdatedAtMixin, new_id
 
 if TYPE_CHECKING:
+    from app.models.async_task_failure import AsyncTaskFailure
     from app.models.registration import BatchRegistration, Registration
     from app.models.exception_registration_offer import ExceptionRegistrationOffer
     from app.models.manual_review_case import ManualReviewCase
@@ -114,6 +115,7 @@ class Event(Base, CreatedAtMixin, UpdatedAtMixin):
         cascade="all, delete-orphan",
     )
     manual_review_cases: Mapped[list["ManualReviewCase"]] = relationship(back_populates="event")
+    async_task_failures: Mapped[list["AsyncTaskFailure"]] = relationship(back_populates="event")
 
 
 class EventFieldDefinition(Base):
@@ -144,6 +146,7 @@ class EventFieldDefinition(Base):
     )
 
 
+from app.models.async_task_failure import AsyncTaskFailure  # noqa: E402
 from app.models.registration import RegistrationFieldValue  # noqa: E402
 from app.models.exception_registration_offer import ExceptionRegistrationOffer  # noqa: E402
 from app.models.manual_review_case import ManualReviewCase  # noqa: E402

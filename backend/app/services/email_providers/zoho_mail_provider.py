@@ -5,7 +5,7 @@ from typing import Any
 import httpx
 
 from app.core.config import Settings
-from app.core.exceptions import EmailConfigurationError, EmailDeliveryError
+from app.core.exceptions import EmailConfigurationError, EmailDeliveryError, EmailMessageValidationError
 from app.schemas.email import EmailMessage
 from app.services.email_providers.base import EmailSendResult, register_email_provider
 
@@ -53,7 +53,9 @@ class ZohoMailProvider:
 
     def _validate_single_recipient(self, message: EmailMessage) -> None:
         if len(message.to) != 1 or len(message.cc) > 1 or len(message.bcc) > 1:
-            raise EmailDeliveryError("Zoho Mail provider supports one recipient per field in this implementation.")
+            raise EmailMessageValidationError(
+                "Zoho Mail provider supports one recipient per field in this implementation."
+            )
 
     async def _post_json(
         self,
@@ -90,4 +92,3 @@ class ZohoMailProvider:
             if message:
                 return str(message)
         return fallback
-

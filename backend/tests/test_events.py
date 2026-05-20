@@ -420,6 +420,7 @@ async def test_published_event_is_visible_on_public_endpoints(
     list_body = list_response.json()
     assert list_body["total"] == 1
     assert list_body["events"][0]["id"] == seeded_paid_published_event.id
+    assert "slots_remaining" not in list_body["events"][0]
 
     assert detail_response.status_code == 200
     detail_body = detail_response.json()
@@ -427,6 +428,7 @@ async def test_published_event_is_visible_on_public_endpoints(
     assert detail_body["state"] == "published"
     assert len(detail_body["custom_fields"]) == 2
     assert [field["display_order"] for field in detail_body["custom_fields"]] == [1, 2]
+    assert "slots_remaining" not in detail_body
 
 
 @pytest.mark.asyncio
@@ -522,14 +524,17 @@ async def test_public_event_list_supports_search_and_is_free_filters(
     assert free_response.status_code == 200
     assert free_response.json()["total"] == 1
     assert free_response.json()["events"][0]["id"] == seeded_free_published_event.id
+    assert "slots_remaining" not in free_response.json()["events"][0]
 
     assert paid_response.status_code == 200
     assert paid_response.json()["total"] == 1
     assert paid_response.json()["events"][0]["id"] == seeded_paid_published_event.id
+    assert "slots_remaining" not in paid_response.json()["events"][0]
 
     assert search_response.status_code == 200
     assert search_response.json()["total"] == 1
     assert search_response.json()["events"][0]["title"] == "Tech Conference 2026"
+    assert "slots_remaining" not in search_response.json()["events"][0]
 
 
 @pytest.mark.asyncio
@@ -662,6 +667,8 @@ async def test_admin_and_public_event_detail_return_matching_field_definitions(
     public_fields = public_response.json()["custom_fields"]
 
     assert admin_fields == public_fields
+    assert "slots_remaining" in admin_response.json()
+    assert "slots_remaining" not in public_response.json()
 
 
 @pytest.mark.asyncio
