@@ -32,6 +32,7 @@ export const publicEventDetailSchema = publicEventSummarySchema.extend({
   custom_fields: z.array(publicEventCustomFieldSchema),
 });
 
+export type EventState = z.infer<typeof eventStateSchema>;
 export type EventFieldType = z.infer<typeof eventFieldTypeSchema>;
 export type PublicEventCustomField = z.infer<typeof publicEventCustomFieldSchema>;
 export type PublicEventSummary = z.infer<typeof publicEventSummarySchema>;

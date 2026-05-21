@@ -7,6 +7,10 @@ import { StaffLayout } from "../layouts/StaffLayout";
 import { AdminRoute } from "./AdminRoute";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { AdminLoginPage } from "../pages/AdminLoginPage";
+import { AdminCreateEventPage } from "../pages/AdminCreateEventPage";
+import { AdminDashboardPage } from "../pages/AdminDashboardPage";
+import { AdminEditEventPage } from "../pages/AdminEditEventPage";
+import { AdminEventsPage } from "../pages/AdminEventsPage";
 import { BatchRegistrationPage } from "../pages/BatchRegistrationPage";
 import { EventDetailPage } from "../pages/EventDetailPage";
 import { EventListPage } from "../pages/EventListPage";
@@ -102,43 +106,19 @@ export function AppRoutes() {
           children: [
             {
               path: "/admin",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Admin"
-                  title="Admin dashboard"
-                  description="The dashboard will be composed from existing backend endpoints once the auth and API layers are connected."
-                />
-              ),
+              element: <AdminDashboardPage />,
             },
             {
               path: "/admin/events",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Admin"
-                  title="Events"
-                  description="Event listing, creation, and editing will be implemented in later frontend phases."
-                />
-              ),
+              element: <AdminEventsPage />,
             },
             {
               path: "/admin/events/new",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Admin"
-                  title="Create event"
-                  description="The event creation form will be implemented once the shared form and API layers are in use."
-                />
-              ),
+              element: <AdminCreateEventPage />,
             },
             {
               path: "/admin/events/:eventId/edit",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Admin"
-                  title="Edit event"
-                  description="Event editing and state update flows will be implemented in later phases."
-                />
-              ),
+              element: <AdminEditEventPage />,
             },
             {
               path: "/admin/staff",

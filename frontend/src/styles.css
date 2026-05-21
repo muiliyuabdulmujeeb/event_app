@@ -674,6 +674,39 @@ a:focus-visible {
   gap: 1rem;
 }
 
+.table-wrap {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 56rem;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  color: var(--color-primary-strong);
+  font-size: 0.92rem;
+}
+
+.table-cell-stack {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--color-text-muted);
+}
+
+.table-cell-stack strong {
+  color: var(--color-primary-strong);
+}
+
 .result-card {
   display: grid;
   gap: 1rem;
@@ -710,6 +743,76 @@ a:focus-visible {
   margin: 0;
   color: var(--color-primary-strong);
   font-size: 1rem;
+}
+
+.detail-card--compact {
+  padding: 1rem 1.1rem;
+}
+
+.detail-card__text--strong {
+  color: var(--color-primary-strong);
+  font-weight: 700;
+}
+
+.metric-card {
+  padding: 1.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.metric-card__label,
+.metric-card__value {
+  margin: 0;
+}
+
+.metric-card__label {
+  color: var(--color-text-muted);
+  font-size: 0.95rem;
+}
+
+.metric-card__value {
+  margin-top: 0.45rem;
+  color: var(--color-primary-strong);
+  font-size: clamp(1.35rem, 2vw, 2rem);
+  font-weight: 700;
+}
+
+.field-array-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.field-array-item {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface-muted);
+}
+
+.field-array-item__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.field-array-item__title {
+  margin: 0;
+  color: var(--color-primary-strong);
+  font-size: 1rem;
+}
+
+.field-array-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.field-array-item__toggle {
+  align-content: center;
 }
 
 .dashboard-shell {
@@ -772,6 +875,7 @@ a:focus-visible {
     padding: 1.5rem;
   }
 
+  .field-array-item__header,
   .custom-field-item,
   .event-card__header,
   .events-section__header,
@@ -812,6 +916,7 @@ a:focus-visible {
     align-items: end;
   }
 
+  .field-array-grid,
   .event-grid,
   .event-detail-grid,
   .lookup-grid,
