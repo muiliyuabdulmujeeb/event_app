@@ -228,6 +228,19 @@ a:focus-visible {
   min-width: 0;
 }
 
+.lookup-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.lookup-form__field {
+  min-width: 0;
+}
+
+.lookup-form__actions {
+  margin-top: 0;
+}
+
 .form-field {
   display: grid;
   gap: 0.45rem;
@@ -488,6 +501,10 @@ a:focus-visible {
   margin-top: 0.15rem;
 }
 
+.form-textarea {
+  resize: vertical;
+}
+
 .participant-toolbar {
   display: flex;
   align-items: center;
@@ -528,6 +545,62 @@ a:focus-visible {
 .participant-card__subtitle {
   margin: 0.35rem 0 0;
   color: var(--color-text-muted);
+}
+
+.lookup-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.notification-list,
+.custom-value-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.notification-card,
+.custom-value-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+}
+
+.notification-card__content {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.notification-card__title,
+.custom-value-card__title {
+  margin: 0;
+  color: var(--color-primary-strong);
+  font-size: 1rem;
+}
+
+.notification-card__meta {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+}
+
+.notification-card__body,
+.custom-value-card__value {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.notification-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.action-form {
+  display: grid;
+  gap: 1rem;
 }
 
 .dashboard-shell {
@@ -624,13 +697,23 @@ a:focus-visible {
     align-items: end;
   }
 
+  .lookup-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+
   .event-grid,
-  .event-detail-grid {
+  .event-detail-grid,
+  .lookup-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .form-grid,
   .custom-form-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .custom-value-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

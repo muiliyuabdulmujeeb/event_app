@@ -12,6 +12,7 @@ import { EventDetailPage } from "../pages/EventDetailPage";
 import { EventListPage } from "../pages/EventListPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { PlaceholderPage } from "../pages/PlaceholderPage";
+import { RegistrationLookupPage } from "../pages/RegistrationLookupPage";
 import { SingleRegistrationPage } from "../pages/SingleRegistrationPage";
 import { StaffLoginPage } from "../pages/StaffLoginPage";
 
@@ -42,13 +43,7 @@ export function AppRoutes() {
         },
         {
           path: "/registrations/lookup",
-          element: (
-            <PlaceholderPage
-              eyebrow="Public"
-              title="Registration lookup"
-              description="Lookup by registration ID and user notification handling will be implemented in a later phase."
-            />
-          ),
+          element: <RegistrationLookupPage />,
         },
         {
           path: "/payment/success",

@@ -11,6 +11,7 @@ export const queryKeys = {
   registrations: {
     lookup: (regId: string) => ["registrations", "lookup", regId] as const,
     eventForm: (eventId: string) => ["registrations", "event-form", eventId] as const,
+    refundRequest: (regId: string) => ["registrations", "refund-request", regId] as const,
   },
   staff: {
     notifications: ["staff", "notifications"] as const,
