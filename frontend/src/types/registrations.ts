@@ -174,6 +174,12 @@ export const refundRequestCreateResponseSchema = z.object({
   message: z.string().min(1),
 });
 
+export const registrationPaymentInitializationResponseSchema = z.object({
+  checkout_url: z.string().url(),
+  payment_reference: z.string().min(1),
+  message: z.string().min(1),
+});
+
 export type RegistrationState = z.infer<typeof registrationStateSchema>;
 export type RegistrationCustomFieldValueInput = z.infer<typeof registrationCustomFieldValueInputSchema>;
 export type SingleRegistrationRequest = z.infer<typeof singleRegistrationRequestSchema>;
@@ -199,3 +205,6 @@ export type RegistrationCancellationRequest = z.infer<typeof registrationCancell
 export type RegistrationCancellationResponse = z.infer<typeof registrationCancellationResponseSchema>;
 export type RefundRequestCreateRequest = z.infer<typeof refundRequestCreateRequestSchema>;
 export type RefundRequestCreateResponse = z.infer<typeof refundRequestCreateResponseSchema>;
+export type RegistrationPaymentInitializationResponse = z.infer<
+  typeof registrationPaymentInitializationResponseSchema
+>;

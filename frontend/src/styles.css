@@ -552,6 +552,36 @@ a:focus-visible {
   gap: 1rem;
 }
 
+.detail-card__actions {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.action-feedback {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface-muted);
+}
+
+.action-feedback__title,
+.action-feedback__meta {
+  margin: 0;
+}
+
+.action-feedback__title {
+  color: var(--color-primary-strong);
+  font-weight: 600;
+}
+
+.action-feedback__meta {
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+}
+
 .notification-list,
 .custom-value-list {
   display: grid;

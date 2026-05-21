@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   cancelRegistration,
   createRefundRequest,
+  initializeRegistrationPayment,
   lookupRegistration,
   markRegistrationNotificationSeen,
 } from "../api/publicRegistrations";
@@ -21,6 +22,7 @@ import { queryKeys } from "../lib/queryKeys";
 import type {
   RegistrationLookupPromotionOffer,
   RegistrationLookupResponse,
+  RegistrationPaymentInitializationResponse,
   RefundRequestStatus,
   UserNotification,
 } from "../types/registrations";
@@ -43,6 +45,8 @@ type OptionalReasonFormValues = z.infer<typeof optionalReasonSchema>;
 export function RegistrationLookupPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialRegId = searchParams.get("reg_id")?.trim() ?? "";
+  const [paymentInitializationResult, setPaymentInitializationResult] =
+    useState<RegistrationPaymentInitializationResponse | null>(null);
   const queryClient = useQueryClient();
 
   const lookupForm = useForm<LookupFormValues>({
@@ -99,6 +103,7 @@ export function RegistrationLookupPage() {
     mutationFn: (values: OptionalReasonFormValues) =>
       cancelRegistration(submittedRegId, { reason: values.reason?.trim() || undefined }),
     onSuccess: async () => {
+      setPaymentInitializationResult(null);
       cancelForm.reset({ reason: "" });
       if (submittedRegId) {
         await queryClient.invalidateQueries({
@@ -133,8 +138,21 @@ export function RegistrationLookupPage() {
     },
   });
 
+  const paymentInitializationMutation = useMutation({
+    mutationFn: () => initializeRegistrationPayment(submittedRegId),
+    onSuccess: async (response) => {
+      setPaymentInitializationResult(response);
+      if (submittedRegId) {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.registrations.lookup(submittedRegId),
+        });
+      }
+    },
+  });
+
   const handleLookupSubmit = lookupForm.handleSubmit((values) => {
     const nextRegId = values.regId.trim();
+    setPaymentInitializationResult(null);
     setSearchParams(nextRegId ? { reg_id: nextRegId } : {});
     cancelForm.reset({ reason: "" });
     refundForm.reset({ reason: "" });
@@ -205,6 +223,13 @@ export function RegistrationLookupPage() {
           refundForm={refundForm}
           refundPending={refundMutation.isPending}
           onRefundSubmit={refundForm.handleSubmit((values) => refundMutation.mutate(values))}
+          paymentInitializationResult={paymentInitializationResult}
+          paymentInitializationPending={paymentInitializationMutation.isPending}
+          paymentInitializationError={paymentInitializationMutation.error?.message ?? null}
+          onInitializePayment={() => {
+            setPaymentInitializationResult(null);
+            paymentInitializationMutation.mutate();
+          }}
         />
       ) : null}
     </div>
@@ -221,6 +246,10 @@ function RegistrationLookupResult({
   refundForm,
   refundPending,
   onRefundSubmit,
+  paymentInitializationResult,
+  paymentInitializationPending,
+  paymentInitializationError,
+  onInitializePayment,
 }: {
   data: RegistrationLookupResponse;
   markSeenPendingId: string | null;
@@ -231,6 +260,10 @@ function RegistrationLookupResult({
   refundForm: ReturnType<typeof useForm<OptionalReasonFormValues>>;
   refundPending: boolean;
   onRefundSubmit: (event?: React.BaseSyntheticEvent) => Promise<void>;
+  paymentInitializationResult: RegistrationPaymentInitializationResponse | null;
+  paymentInitializationPending: boolean;
+  paymentInitializationError: string | null;
+  onInitializePayment: () => void;
 }) {
   const { registration, event, payment, promotion_offer, refund_request, notifications } = data;
   const canAttemptCancellation =
@@ -238,6 +271,10 @@ function RegistrationLookupResult({
     (registration.state === "confirmed" ||
       registration.state === "pending_payment" ||
       registration.state === "waitlisted");
+  const canAttemptPaymentRecovery =
+    event.is_free === false &&
+    registration.is_batch === false &&
+    registration.state === "pending_payment";
 
   const canAttemptRefund =
     registration.state === "cancelled" &&
@@ -344,6 +381,44 @@ function RegistrationLookupResult({
             ) : (
               <p className="detail-card__text">No payment summary is available for this registration.</p>
             )}
+
+            {canAttemptPaymentRecovery ? (
+              <div className="detail-card__actions">
+                {paymentInitializationError ? (
+                  <div className="form-alert" role="alert">
+                    {paymentInitializationError}
+                  </div>
+                ) : null}
+
+                {paymentInitializationResult ? (
+                  <div className="action-feedback">
+                    <p className="action-feedback__title">{paymentInitializationResult.message}</p>
+                    <p className="action-feedback__meta">
+                      Reference: {paymentInitializationResult.payment_reference}
+                    </p>
+                    <div className="panel__actions">
+                      <a
+                        href={paymentInitializationResult.checkout_url}
+                        className="button-link button-link--primary"
+                      >
+                        Continue to payment
+                      </a>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="panel__actions">
+                  <button
+                    type="button"
+                    className="button-link button-link--primary"
+                    onClick={onInitializePayment}
+                    disabled={paymentInitializationPending}
+                  >
+                    {paymentInitializationPending ? "Preparing payment link..." : "Get fresh payment link"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </article>
 
           <article className="detail-card">

@@ -11,6 +11,7 @@ import { BatchRegistrationPage } from "../pages/BatchRegistrationPage";
 import { EventDetailPage } from "../pages/EventDetailPage";
 import { EventListPage } from "../pages/EventListPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
+import { PaymentStatusPage } from "../pages/PaymentStatusPage";
 import { PlaceholderPage } from "../pages/PlaceholderPage";
 import { RegistrationLookupPage } from "../pages/RegistrationLookupPage";
 import { SingleRegistrationPage } from "../pages/SingleRegistrationPage";
@@ -47,23 +48,11 @@ export function AppRoutes() {
         },
         {
           path: "/payment/success",
-          element: (
-            <PlaceholderPage
-              eyebrow="Payments"
-              title="Payment success"
-              description="This page will later read gateway callback query parameters and confirm successful payment outcomes."
-            />
-          ),
+          element: <PaymentStatusPage variant="success" />,
         },
         {
           path: "/payment/failure",
-          element: (
-            <PlaceholderPage
-              eyebrow="Payments"
-              title="Payment failure"
-              description="This page will later read gateway callback query parameters and display payment failure outcomes."
-            />
-          ),
+          element: <PaymentStatusPage variant="failure" />,
         },
       ],
     },

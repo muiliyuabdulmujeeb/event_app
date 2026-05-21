@@ -3,6 +3,7 @@ import { parseApiResponse } from "../lib/apiParsers";
 import {
   batchRegistrationRequestSchema,
   batchRegistrationResponseSchema,
+  registrationPaymentInitializationResponseSchema,
   refundRequestCreateRequestSchema,
   refundRequestCreateResponseSchema,
   registrationCancellationRequestSchema,
@@ -13,6 +14,7 @@ import {
   userNotificationSeenResponseSchema,
   type BatchRegistrationRequest,
   type BatchRegistrationResponse,
+  type RegistrationPaymentInitializationResponse,
   type RefundRequestCreateRequest,
   type RefundRequestCreateResponse,
   type RegistrationCancellationRequest,
@@ -121,5 +123,16 @@ export async function createRefundRequest(
     refundRequestCreateResponseSchema,
     response.data,
     "the refund request result",
+  );
+}
+
+export async function initializeRegistrationPayment(
+  regId: string,
+): Promise<RegistrationPaymentInitializationResponse> {
+  const response = await http.post(`/registrations/${regId}/payments/initialize`);
+  return parseApiResponse(
+    registrationPaymentInitializationResponseSchema,
+    response.data,
+    "the payment initialization result",
   );
 }
