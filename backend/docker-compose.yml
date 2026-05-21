@@ -75,12 +75,14 @@ services:
 
   seed:
     build: .
-    command: sh -c "alembic upgrade head && python seed.py"
+    command: sh -c "python seed.py"
     env_file:
       - .env
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     profiles:
       - seed
     restart: "no"

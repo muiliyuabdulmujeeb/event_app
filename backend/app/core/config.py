@@ -24,6 +24,27 @@ class Settings(BaseSettings):
     payment_timeout_minutes: int = Field(30, alias="PAYMENT_TIMEOUT_MINUTES")
     application_base_url: str = Field("http://localhost:8000", alias="APPLICATION_BASE_URL")
     waitlist_promotion_default_expiry_minutes: int = Field(30, alias="WAITLIST_PROMOTION_DEFAULT_EXPIRY_MINUTES")
+    cors_allowed_origins_raw: str = Field(
+        (
+            "http://localhost:5173,"
+            "https://localhost:5173,"
+            "http://localhost:5174,"
+            "https://localhost:5174,"
+            "http://localhost:3000,"
+            "https://localhost:3000,"
+            "http://localhost:3001,"
+            "https://localhost:3001,"
+            "http://127.0.0.1:5173,"
+            "https://127.0.0.1:5173,"
+            "http://127.0.0.1:5174,"
+            "https://127.0.0.1:5174,"
+            "http://127.0.0.1:3000,"
+            "https://127.0.0.1:3000,"
+            "http://127.0.0.1:3001,"
+            "https://127.0.0.1:3001"
+        ),
+        alias="CORS_ALLOWED_ORIGINS",
+    )
     email_provider: str = Field("console", alias="EMAIL_PROVIDER")
     email_provider_failover_chain: str = Field(
         "resend,zoho_mail,sendgrid,mailgun,amazon_ses",
@@ -58,6 +79,14 @@ class Settings(BaseSettings):
 
     def ensure_runtime_directories(self) -> None:
         Path("alembic/versions").mkdir(parents=True, exist_ok=True)
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.cors_allowed_origins_raw.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache
