@@ -7,6 +7,8 @@ import { StaffLayout } from "../layouts/StaffLayout";
 import { AdminRoute } from "./AdminRoute";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { AdminLoginPage } from "../pages/AdminLoginPage";
+import { EventDetailPage } from "../pages/EventDetailPage";
+import { EventListPage } from "../pages/EventListPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { PlaceholderPage } from "../pages/PlaceholderPage";
 import { StaffLoginPage } from "../pages/StaffLoginPage";
@@ -22,23 +24,11 @@ export function AppRoutes() {
       children: [
         {
           path: "/events",
-          element: (
-            <PlaceholderPage
-              eyebrow="Public"
-              title="Events"
-              description="Public event catalogue and event detail pages will be implemented in the next frontend phases."
-            />
-          ),
+          element: <EventListPage />,
         },
         {
           path: "/events/:eventId",
-          element: (
-            <PlaceholderPage
-              eyebrow="Public"
-              title="Event details"
-              description="This route is reserved for the event detail and registration entry flows."
-            />
-          ),
+          element: <EventDetailPage />,
         },
         {
           path: "/events/:eventId/register",
