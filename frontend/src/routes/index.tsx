@@ -7,6 +7,7 @@ import { StaffLayout } from "../layouts/StaffLayout";
 import { AdminRoute } from "./AdminRoute";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { AdminLoginPage } from "../pages/AdminLoginPage";
+import { BatchRegistrationPage } from "../pages/BatchRegistrationPage";
 import { EventDetailPage } from "../pages/EventDetailPage";
 import { EventListPage } from "../pages/EventListPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -37,13 +38,7 @@ export function AppRoutes() {
         },
         {
           path: "/events/:eventId/register/batch",
-          element: (
-            <PlaceholderPage
-              eyebrow="Public"
-              title="Batch registration"
-              description="The batch registration workflow will be connected to the backend in later phases."
-            />
-          ),
+          element: <BatchRegistrationPage />,
         },
         {
           path: "/registrations/lookup",
