@@ -6,8 +6,10 @@ import { PublicLayout } from "../layouts/PublicLayout";
 import { StaffLayout } from "../layouts/StaffLayout";
 import { AdminRoute } from "./AdminRoute";
 import { ProtectedRoute } from "./ProtectedRoute";
+import { AdminLoginPage } from "../pages/AdminLoginPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { PlaceholderPage } from "../pages/PlaceholderPage";
+import { StaffLoginPage } from "../pages/StaffLoginPage";
 
 export function AppRoutes() {
   return useRoutes([
@@ -95,23 +97,11 @@ export function AppRoutes() {
       children: [
         {
           path: "/staff/login",
-          element: (
-            <PlaceholderPage
-              eyebrow="Authentication"
-              title="Staff sign in"
-              description="Staff authentication will be implemented in the next phase using the existing backend login and refresh endpoints."
-            />
-          ),
+          element: <StaffLoginPage />,
         },
         {
           path: "/admin/login",
-          element: (
-            <PlaceholderPage
-              eyebrow="Authentication"
-              title="Admin sign in"
-              description="Admin authentication will be implemented in the next phase using the shared backend auth flow."
-            />
-          ),
+          element: <AdminLoginPage />,
         },
       ],
     },

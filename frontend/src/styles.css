@@ -138,8 +138,19 @@ a:focus-visible {
 
 .nav-link--active,
 .segment-nav__link--active,
-.button-link {
+.button-link--primary {
   background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.button-link--secondary {
+  background: transparent;
+  border: 1px solid rgba(248, 250, 252, 0.28);
+  color: var(--color-primary-contrast);
+}
+
+.button-link--secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
   color: var(--color-primary-contrast);
 }
 
@@ -197,6 +208,55 @@ a:focus-visible {
   margin-bottom: 1rem;
 }
 
+.auth-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.form-field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.form-label {
+  font-weight: 600;
+  color: var(--color-primary-strong);
+}
+
+.form-input {
+  width: 100%;
+  min-height: 2.9rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.form-input[aria-invalid="true"] {
+  border-color: var(--color-danger-border);
+}
+
+.form-error {
+  margin: 0;
+  color: var(--color-danger-text);
+  font-size: 0.94rem;
+}
+
+.form-alert {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-danger-border);
+  border-radius: 0.9rem;
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
 .dashboard-shell {
   min-height: 100vh;
   display: grid;
@@ -229,6 +289,16 @@ a:focus-visible {
 
 .dashboard-main {
   padding: 1.5rem;
+}
+
+.sidebar-meta {
+  margin: 0 0 1rem;
+  color: rgba(248, 250, 252, 0.78);
+  font-size: 0.95rem;
+}
+
+.sidebar-footer {
+  margin-top: 1.5rem;
 }
 
 .state-card--error {

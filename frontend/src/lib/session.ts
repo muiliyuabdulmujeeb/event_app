@@ -64,6 +64,22 @@ export function getAuthRole(): AuthRole | null {
   return getAuthSession()?.role ?? null;
 }
 
+export function updateAccessToken(accessToken: string): void {
+  const session = getAuthSession();
+  if (!session || typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(
+    SESSION_STORAGE_KEY,
+    JSON.stringify({
+      ...session,
+      accessToken,
+    }),
+  );
+  emitSessionChanged();
+}
+
 export function useAuthSession(): AuthSession | null {
   return useSyncExternalStore(subscribeToSessionChanges, getAuthSession, () => null);
 }
