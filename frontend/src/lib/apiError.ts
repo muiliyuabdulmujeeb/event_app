@@ -8,6 +8,9 @@ const validationItemSchema = z.object({
 
 const errorPayloadSchema = z.object({
   detail: z.union([z.string(), z.array(validationItemSchema)]).optional(),
+  duplicate_email: z.boolean().optional(),
+  duplicate_warning: z.boolean().optional(),
+  duplicate_emails: z.array(z.string()).optional(),
 });
 
 export type ApiErrorCode =
@@ -24,6 +27,11 @@ export class ApiError extends Error {
   readonly code: ApiErrorCode;
   readonly status?: number;
   readonly fieldErrors?: Record<string, string[]>;
+  readonly extras?: {
+    duplicate_email?: boolean;
+    duplicate_warning?: boolean;
+    duplicate_emails?: string[];
+  };
 
   constructor(
     message: string,
@@ -31,6 +39,11 @@ export class ApiError extends Error {
       code: ApiErrorCode;
       status?: number;
       fieldErrors?: Record<string, string[]>;
+      extras?: {
+        duplicate_email?: boolean;
+        duplicate_warning?: boolean;
+        duplicate_emails?: string[];
+      };
     },
   ) {
     super(message);
@@ -38,6 +51,7 @@ export class ApiError extends Error {
     this.code = options.code;
     this.status = options.status;
     this.fieldErrors = options.fieldErrors;
+    this.extras = options.extras;
   }
 }
 
@@ -64,12 +78,20 @@ export function normalizeApiError(error: unknown): ApiError {
 
     const parsedPayload = errorPayloadSchema.safeParse(error.response?.data);
     const detail = parsedPayload.success ? parsedPayload.data.detail : undefined;
+    const extras = parsedPayload.success
+      ? {
+          duplicate_email: parsedPayload.data.duplicate_email,
+          duplicate_warning: parsedPayload.data.duplicate_warning,
+          duplicate_emails: parsedPayload.data.duplicate_emails,
+        }
+      : undefined;
 
     if (Array.isArray(detail)) {
       return new ApiError("Please correct the highlighted fields and try again.", {
         code: "validation",
         status,
         fieldErrors: groupFieldErrors(detail),
+        extras,
       });
     }
 
@@ -79,6 +101,7 @@ export function normalizeApiError(error: unknown): ApiError {
     return new ApiError(detailMessage ?? fallbackMessage, {
       code: statusToErrorCode(status),
       status,
+      extras,
     });
   }
 

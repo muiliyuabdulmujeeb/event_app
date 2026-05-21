@@ -11,6 +11,7 @@ import { EventDetailPage } from "../pages/EventDetailPage";
 import { EventListPage } from "../pages/EventListPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { PlaceholderPage } from "../pages/PlaceholderPage";
+import { SingleRegistrationPage } from "../pages/SingleRegistrationPage";
 import { StaffLoginPage } from "../pages/StaffLoginPage";
 
 export function AppRoutes() {
@@ -32,13 +33,7 @@ export function AppRoutes() {
         },
         {
           path: "/events/:eventId/register",
-          element: (
-            <PlaceholderPage
-              eyebrow="Public"
-              title="Single registration"
-              description="The single-attendee registration workflow will be connected to the backend in later phases."
-            />
-          ),
+          element: <SingleRegistrationPage />,
         },
         {
           path: "/events/:eventId/register/batch",
