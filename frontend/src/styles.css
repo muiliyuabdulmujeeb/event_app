@@ -633,6 +633,85 @@ a:focus-visible {
   gap: 1rem;
 }
 
+.choice-group {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice-group__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.choice-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.9rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.choice-option input {
+  margin: 0;
+}
+
+.metric-grid,
+.result-card__grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.result-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.result-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface);
+}
+
+.result-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.result-card__title {
+  margin: 0;
+  color: var(--color-primary-strong);
+  font-size: 1.1rem;
+}
+
+.result-card__meta {
+  margin: 0.35rem 0 0;
+  color: var(--color-text-muted);
+}
+
+.detail-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.detail-section__title {
+  margin: 0;
+  color: var(--color-primary-strong);
+  font-size: 1rem;
+}
+
 .dashboard-shell {
   min-height: 100vh;
   display: grid;
@@ -697,7 +776,8 @@ a:focus-visible {
   .event-card__header,
   .events-section__header,
   .section-header,
-  .participant-card__header {
+  .participant-card__header,
+  .result-card__header {
     align-items: stretch;
     flex-direction: column;
   }
@@ -734,7 +814,9 @@ a:focus-visible {
 
   .event-grid,
   .event-detail-grid,
-  .lookup-grid {
+  .lookup-grid,
+  .metric-grid,
+  .result-card__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

@@ -15,7 +15,10 @@ import { PaymentStatusPage } from "../pages/PaymentStatusPage";
 import { PlaceholderPage } from "../pages/PlaceholderPage";
 import { RegistrationLookupPage } from "../pages/RegistrationLookupPage";
 import { SingleRegistrationPage } from "../pages/SingleRegistrationPage";
+import { StaffDashboardPage } from "../pages/StaffDashboardPage";
 import { StaffLoginPage } from "../pages/StaffLoginPage";
+import { StaffNotificationsPage } from "../pages/StaffNotificationsPage";
+import { StaffRegistrationsPage } from "../pages/StaffRegistrationsPage";
 
 export function AppRoutes() {
   return useRoutes([
@@ -77,33 +80,15 @@ export function AppRoutes() {
           children: [
             {
               path: "/staff",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Staff"
-                  title="Staff dashboard"
-                  description="Staff dashboard composition will be built after the shared auth and API layers are in place."
-                />
-              ),
+              element: <StaffDashboardPage />,
             },
             {
               path: "/staff/registrations",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Staff"
-                  title="Registration operations"
-                  description="Registration search, check-in, and reverse check-in will be implemented in a later phase."
-                />
-              ),
+              element: <StaffRegistrationsPage />,
             },
             {
               path: "/staff/notifications",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Staff"
-                  title="Staff notifications"
-                  description="Unread staff notifications will be surfaced here once the staff workspace is connected."
-                />
-              ),
+              element: <StaffNotificationsPage />,
             },
           ],
         },
