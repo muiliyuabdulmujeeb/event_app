@@ -4,6 +4,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+AGENTS.md
+CLAUDE.md
 .coverage
 htmlcov/
 celerybeat-schedule

@@ -1,0 +1,6 @@
+.env
+.ruff_cache/
+AGENTS.md
+CLAUDE.md
+node_modules/
+dist/
