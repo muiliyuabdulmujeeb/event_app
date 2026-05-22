@@ -716,6 +716,67 @@ a:focus-visible {
   color: var(--color-primary-strong);
 }
 
+.admin-filters-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.admin-filters-grid {
+  align-items: start;
+}
+
+.admin-filters-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.form-input--multiselect {
+  min-height: 9rem;
+  padding-block: 0.55rem;
+}
+
+.registration-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.table-details {
+  color: var(--color-text);
+}
+
+.table-details__summary {
+  cursor: pointer;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.table-details__content {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.table-details__text {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.mini-detail-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--color-text);
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
 .result-card {
   display: grid;
   gap: 1rem;
@@ -920,6 +981,7 @@ a:focus-visible {
   }
 
   .field-array-item__header,
+  .pagination-bar,
   .custom-field-item,
   .event-card__header,
   .events-section__header,
@@ -973,6 +1035,10 @@ a:focus-visible {
   .form-grid,
   .custom-form-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-filters-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .custom-value-list {

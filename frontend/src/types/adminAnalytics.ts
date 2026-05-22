@@ -1,0 +1,172 @@
+import { z } from "zod";
+
+export const analyticsRegistrationStateSchema = z.enum([
+  "pending_payment",
+  "confirmed",
+  "failed",
+  "cancelled",
+  "waitlisted",
+]);
+
+export const analyticsPaymentStatusSchema = z.enum([
+  "pending",
+  "successful",
+  "failed",
+]);
+
+export const analyticsRefundStatusSchema = z.enum([
+  "requested",
+  "approved",
+  "rejected",
+  "completed",
+]);
+
+export const analyticsCancellationReasonSchema = z.enum([
+  "user_cancelled",
+  "overflow_rule_changed",
+]);
+
+export const analyticsPaymentGatewaySchema = z.enum([
+  "paystack",
+  "squad",
+  "mock",
+]);
+
+export const adminAnalyticsRegistrationSortFields = [
+  "registered_at",
+  "reg_id",
+  "first_name",
+  "last_name",
+  "email",
+  "registration_state",
+  "is_checked_in",
+  "checked_in_at",
+  "is_batch",
+  "event_title",
+  "event_date",
+  "amount_paid",
+  "payment_status",
+  "paid_at",
+] as const;
+
+export const adminAnalyticsSortOrderSchema = z.enum(["asc", "desc"]);
+export const adminAnalyticsRegistrationSortFieldSchema = z.enum(
+  adminAnalyticsRegistrationSortFields,
+);
+
+export const adminAnalyticsRegistrationCustomFieldSchema = z.object({
+  label: z.string().min(1),
+  value: z.string(),
+});
+
+export const adminAnalyticsRegistrationEventSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  event_date: z.string().datetime({ offset: true }),
+  location: z.string().min(1),
+  is_free: z.boolean(),
+});
+
+export const adminAnalyticsRegistrationPaymentSchema = z.object({
+  amount_paid: z.number().int().nonnegative(),
+  currency: z.string().min(1),
+  payment_gateway: analyticsPaymentGatewaySchema.nullable(),
+  payment_reference: z.string().nullable(),
+  payment_status: analyticsPaymentStatusSchema.nullable(),
+  paid_at: z.string().datetime({ offset: true }).nullable(),
+});
+
+export const adminAnalyticsRegistrationRowSchema = z.object({
+  reg_id: z.string().min(1),
+  first_name: z.string().min(1),
+  last_name: z.string().min(1),
+  email: z.string().email(),
+  registration_state: analyticsRegistrationStateSchema,
+  refund_status: analyticsRefundStatusSchema.nullable(),
+  cancellation_reason: analyticsCancellationReasonSchema.nullable(),
+  was_waitlisted: z.boolean(),
+  previous_waitlist_position: z.number().int().positive().nullable(),
+  is_checked_in: z.boolean(),
+  checked_in_at: z.string().datetime({ offset: true }).nullable(),
+  registered_at: z.string().datetime({ offset: true }),
+  is_batch: z.boolean(),
+  batch_submitter_name: z.string().nullable(),
+  batch_submitter_email: z.string().nullable(),
+  used_exception_offer: z.boolean(),
+  payment_waived: z.boolean(),
+  capacity_override_applied: z.boolean(),
+  event: adminAnalyticsRegistrationEventSchema,
+  payment: adminAnalyticsRegistrationPaymentSchema.nullable(),
+  custom_fields: z.array(adminAnalyticsRegistrationCustomFieldSchema),
+});
+
+export const adminAnalyticsRegistrationsResponseSchema = z.object({
+  page: z.number().int().positive(),
+  page_size: z.number().int().positive(),
+  total: z.number().int().nonnegative(),
+  sort_by: z.string().min(1),
+  sort_order: adminAnalyticsSortOrderSchema,
+  registrations: z.array(adminAnalyticsRegistrationRowSchema),
+});
+
+export type AnalyticsRegistrationState = z.infer<
+  typeof analyticsRegistrationStateSchema
+>;
+export type AnalyticsPaymentStatus = z.infer<
+  typeof analyticsPaymentStatusSchema
+>;
+export type AnalyticsRefundStatus = z.infer<
+  typeof analyticsRefundStatusSchema
+>;
+export type AnalyticsCancellationReason = z.infer<
+  typeof analyticsCancellationReasonSchema
+>;
+export type AnalyticsPaymentGateway = z.infer<
+  typeof analyticsPaymentGatewaySchema
+>;
+export type AdminAnalyticsRegistrationSortField = z.infer<
+  typeof adminAnalyticsRegistrationSortFieldSchema
+>;
+export type AdminAnalyticsSortOrder = z.infer<
+  typeof adminAnalyticsSortOrderSchema
+>;
+export type AdminAnalyticsRegistrationSortBy =
+  | AdminAnalyticsRegistrationSortField
+  | `custom_field:${string}`;
+export type AdminAnalyticsRegistrationCustomField = z.infer<
+  typeof adminAnalyticsRegistrationCustomFieldSchema
+>;
+export type AdminAnalyticsRegistrationEvent = z.infer<
+  typeof adminAnalyticsRegistrationEventSchema
+>;
+export type AdminAnalyticsRegistrationPayment = z.infer<
+  typeof adminAnalyticsRegistrationPaymentSchema
+>;
+export type AdminAnalyticsRegistrationRow = z.infer<
+  typeof adminAnalyticsRegistrationRowSchema
+>;
+export type AdminAnalyticsRegistrationsResponse = z.infer<
+  typeof adminAnalyticsRegistrationsResponseSchema
+>;
+
+export type AdminAnalyticsRegistrationsParams = {
+  event_ids?: string[];
+  date_from?: string;
+  date_to?: string;
+  state?: AnalyticsRegistrationState;
+  is_checked_in?: boolean;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  is_batch?: boolean;
+  payment_status?: AnalyticsPaymentStatus;
+  paid_from?: string;
+  paid_to?: string;
+  amount_min?: number;
+  amount_max?: number;
+  custom_field?: string[];
+  page?: number;
+  page_size?: number;
+  sort_by?: AdminAnalyticsRegistrationSortBy;
+  sort_order?: AdminAnalyticsSortOrder;
+};

@@ -11,6 +11,7 @@ import { AdminCreateEventPage } from "../pages/AdminCreateEventPage";
 import { AdminDashboardPage } from "../pages/AdminDashboardPage";
 import { AdminEditEventPage } from "../pages/AdminEditEventPage";
 import { AdminEventsPage } from "../pages/AdminEventsPage";
+import { AdminRegistrationsPage } from "../pages/AdminRegistrationsPage";
 import { AdminStaffDetailPage } from "../pages/AdminStaffDetailPage";
 import { AdminStaffPage } from "../pages/AdminStaffPage";
 import { BatchRegistrationPage } from "../pages/BatchRegistrationPage";
@@ -132,13 +133,7 @@ export function AppRoutes() {
             },
             {
               path: "/admin/registrations",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Admin"
-                  title="Registration table"
-                  description="This page will later use the analytics registration endpoint as the source of truth."
-                />
-              ),
+              element: <AdminRegistrationsPage />,
             },
             {
               path: "/admin/refunds",
