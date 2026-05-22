@@ -15,6 +15,7 @@ import {
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
+import { NotificationQueue } from "../components/NotificationQueue";
 import { PageHeader } from "../components/PageHeader";
 import { ApiError } from "../lib/apiError";
 import { formatDate, formatDateTime } from "../lib/date";
@@ -24,7 +25,6 @@ import type {
   RegistrationLookupResponse,
   RegistrationPaymentInitializationResponse,
   RefundRequestStatus,
-  UserNotification,
 } from "../types/registrations";
 
 const lookupSchema = z.object({
@@ -287,6 +287,13 @@ function RegistrationLookupResult({
 
   return (
     <>
+      <NotificationQueue
+        notifications={notifications}
+        pendingNotificationId={markSeenPendingId}
+        errorMessage={markSeenError}
+        onDismiss={onMarkSeen}
+      />
+
       <section className="panel">
         <PageHeader
           eyebrow="Registration summary"
@@ -502,14 +509,10 @@ function RegistrationLookupResult({
       <section className="panel">
         <div className="section-header">
           <h2 className="section-title">Unread notifications</h2>
-          <p className="section-note">The backend lookup endpoint returns only unseen user notifications.</p>
+          <p className="section-note">
+            The backend lookup endpoint returns only unseen user notifications. They are shown one at a time in a modal queue, and dismissing each update marks it as seen.
+          </p>
         </div>
-
-        {markSeenError ? (
-          <div className="form-alert" role="alert">
-            {markSeenError}
-          </div>
-        ) : null}
 
         {notifications.length > 0 ? (
           <div className="notification-list">

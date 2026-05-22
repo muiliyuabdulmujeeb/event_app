@@ -2,12 +2,9 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { listStaffNotifications } from "../api/staff";
-import { EmptyState } from "../components/EmptyState";
-import { ErrorState } from "../components/ErrorState";
-import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { UnreadNotificationPreviewPanel } from "../components/UnreadNotificationPreviewPanel";
 import { ApiError } from "../lib/apiError";
-import { formatDateTime } from "../lib/date";
 import { queryKeys } from "../lib/queryKeys";
 import { useAuthSession } from "../lib/session";
 import type { StaffNotificationListResponse } from "../types/staff";
@@ -18,6 +15,10 @@ export function StaffDashboardPage() {
     queryKey: queryKeys.staff.notifications,
     queryFn: ({ signal }) => listStaffNotifications(signal),
   });
+  const shouldShowNotificationPanel =
+    notificationsQuery.isPending ||
+    notificationsQuery.isError ||
+    (notificationsQuery.isSuccess && notificationsQuery.data.total > 0);
 
   return (
     <div className="page-stack">
@@ -59,56 +60,18 @@ export function StaffDashboardPage() {
         </div>
       </section>
 
-      <section className="panel">
-        <div className="section-header">
-          <h2 className="section-title">Unread notifications</h2>
-          <p className="section-note">
-            This dashboard uses the same unread-notification endpoint as the dedicated staff notifications page.
-          </p>
-        </div>
-
-        {notificationsQuery.isPending ? (
-          <LoadingState label="Loading unread staff notifications..." />
-        ) : null}
-
-        {notificationsQuery.isError ? (
-          <ErrorState
-            title="Could not load unread notifications"
-            message={notificationsQuery.error.message}
-          />
-        ) : null}
-
-        {notificationsQuery.isSuccess && notificationsQuery.data.notifications.length === 0 ? (
-          <EmptyState
-            title="No unread notifications"
-            description="You are fully caught up right now."
-          />
-        ) : null}
-
-        {notificationsQuery.isSuccess && notificationsQuery.data.notifications.length > 0 ? (
-          <div className="notification-list">
-            {notificationsQuery.data.notifications.slice(0, 3).map((notification) => (
-              <article className="notification-card" key={notification.id}>
-                <div className="notification-card__content">
-                  <h3 className="notification-card__title">{notification.title}</h3>
-                  <p className="notification-card__meta">
-                    {formatDateTime(notification.created_at)}
-                  </p>
-                  <p className="notification-card__body">{notification.body}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : null}
-
-        {notificationsQuery.isSuccess && notificationsQuery.data.notifications.length > 3 ? (
-          <div className="panel__actions">
-            <Link to="/staff/notifications" className="button-link">
-              View all unread notifications
-            </Link>
-          </div>
-        ) : null}
-      </section>
+      {shouldShowNotificationPanel ? (
+        <UnreadNotificationPreviewPanel
+          title="Unread notifications waiting"
+          description="Unread items are surfaced here when you sign in. Use the dedicated inbox to review and mark them as read."
+          notifications={notificationsQuery.data?.notifications ?? []}
+          total={notificationsQuery.data?.total ?? 0}
+          isPending={notificationsQuery.isPending}
+          errorMessage={notificationsQuery.isError ? notificationsQuery.error.message : null}
+          emptyMessage="You are fully caught up right now."
+          actions={[{ to: "/staff/notifications", label: "Open notification inbox", primary: true }]}
+        />
+      ) : null}
     </div>
   );
 }

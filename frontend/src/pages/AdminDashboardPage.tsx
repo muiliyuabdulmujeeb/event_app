@@ -3,19 +3,26 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import { listAdminEvents } from "../api/adminEvents";
+import { listStaffNotifications } from "../api/staff";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorState } from "../components/ErrorState";
 import { LoadingState } from "../components/LoadingState";
 import { PageHeader } from "../components/PageHeader";
+import { UnreadNotificationPreviewPanel } from "../components/UnreadNotificationPreviewPanel";
 import { ApiError } from "../lib/apiError";
 import { formatDateTime } from "../lib/date";
 import { queryKeys } from "../lib/queryKeys";
 import type { AdminEventListResponse, AdminEventSummary } from "../types/adminEvents";
+import type { StaffNotificationListResponse } from "../types/staff";
 
 export function AdminDashboardPage() {
   const eventsQuery = useQuery<AdminEventListResponse, ApiError>({
     queryKey: queryKeys.adminEvents.all,
     queryFn: ({ signal }) => listAdminEvents(signal),
+  });
+  const notificationsQuery = useQuery<StaffNotificationListResponse, ApiError>({
+    queryKey: queryKeys.staff.notifications,
+    queryFn: ({ signal }) => listStaffNotifications(signal),
   });
 
   const metrics = useMemo(() => {
@@ -50,6 +57,10 @@ export function AdminDashboardPage() {
 
     return totals;
   }, [eventsQuery.data]);
+  const shouldShowNotificationPanel =
+    notificationsQuery.isPending ||
+    notificationsQuery.isError ||
+    (notificationsQuery.isSuccess && notificationsQuery.data.total > 0);
 
   if (eventsQuery.isPending) {
     return <LoadingState label="Loading admin dashboard..." />;
@@ -80,6 +91,22 @@ export function AdminDashboardPage() {
           </div>
         </section>
 
+        {shouldShowNotificationPanel ? (
+          <UnreadNotificationPreviewPanel
+            title="Unread notifications"
+            description="This panel uses the shared unread staff/admin notifications endpoint for the current account. The detailed unread inbox currently lives on the staff notifications route."
+            notifications={notificationsQuery.data?.notifications ?? []}
+            total={notificationsQuery.data?.total ?? 0}
+            isPending={notificationsQuery.isPending}
+            errorMessage={notificationsQuery.isError ? notificationsQuery.error.message : null}
+            emptyMessage="There are no unread notifications for this account right now."
+            actions={[
+              { to: "/staff/notifications", label: "Open unread inbox", primary: true },
+              { to: "/admin/notifications", label: "Send notification" },
+            ]}
+          />
+        ) : null}
+
         <EmptyState
           title="No events created yet"
           description="Once events exist, this dashboard will summarize states, registrations, and recent updates using the live admin event list."
@@ -107,6 +134,22 @@ export function AdminDashboardPage() {
           </Link>
         </div>
       </section>
+
+      {shouldShowNotificationPanel ? (
+        <UnreadNotificationPreviewPanel
+          title="Unread notifications"
+          description="This panel uses the shared unread staff/admin notifications endpoint for the current account. The detailed unread inbox currently lives on the staff notifications route."
+          notifications={notificationsQuery.data?.notifications ?? []}
+          total={notificationsQuery.data?.total ?? 0}
+          isPending={notificationsQuery.isPending}
+          errorMessage={notificationsQuery.isError ? notificationsQuery.error.message : null}
+          emptyMessage="There are no unread notifications for this account right now."
+          actions={[
+            { to: "/staff/notifications", label: "Open unread inbox", primary: true },
+            { to: "/admin/notifications", label: "Send notification" },
+          ]}
+        />
+      ) : null}
 
       <section className="metric-grid">
         <MetricCard label="Total events" value={metrics.totalEvents} />

@@ -627,6 +627,56 @@ a:focus-visible {
   color: var(--color-danger-text);
 }
 
+.notification-queue {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+}
+
+.notification-queue__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 29, 59, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.notification-queue__dialog {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 34rem);
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1.25rem;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-panel);
+}
+
+.notification-queue__title,
+.notification-queue__body,
+.notification-queue__meta,
+.notification-queue__progress {
+  margin: 0;
+}
+
+.notification-queue__title {
+  color: var(--color-primary-strong);
+  font-size: 1.35rem;
+}
+
+.notification-queue__meta,
+.notification-queue__progress {
+  color: var(--color-text-muted);
+}
+
+.notification-queue__body {
+  color: var(--color-text);
+}
+
 .notification-list,
 .custom-value-list {
   display: grid;
