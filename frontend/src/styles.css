@@ -734,6 +734,10 @@ a:focus-visible {
   padding-block: 0.55rem;
 }
 
+.form-input--multiselect option {
+  padding: 0.35rem 0.45rem;
+}
+
 .registration-flags {
   display: flex;
   flex-wrap: wrap;

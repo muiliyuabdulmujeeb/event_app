@@ -10,6 +10,7 @@ import { AdminLoginPage } from "../pages/AdminLoginPage";
 import { AdminCreateEventPage } from "../pages/AdminCreateEventPage";
 import { AdminDashboardPage } from "../pages/AdminDashboardPage";
 import { AdminEditEventPage } from "../pages/AdminEditEventPage";
+import { AdminAnalyticsPage } from "../pages/AdminAnalyticsPage";
 import { AdminEventsPage } from "../pages/AdminEventsPage";
 import { AdminNotificationsPage } from "../pages/AdminNotificationsPage";
 import { AdminRegistrationsPage } from "../pages/AdminRegistrationsPage";
@@ -147,13 +148,7 @@ export function AppRoutes() {
             },
             {
               path: "/admin/analytics",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Admin"
-                  title="Analytics"
-                  description="Analytics and export flows will be implemented in a later frontend phase."
-                />
-              ),
+              element: <AdminAnalyticsPage />,
             },
           ],
         },

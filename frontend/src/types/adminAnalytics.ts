@@ -32,6 +32,9 @@ export const analyticsPaymentGatewaySchema = z.enum([
   "mock",
 ]);
 
+export const analyticsDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const analyticsDownloadFormatSchema = z.enum(["csv", "pdf"]);
+
 export const adminAnalyticsRegistrationSortFields = [
   "registered_at",
   "reg_id",
@@ -109,11 +112,87 @@ export const adminAnalyticsRegistrationsResponseSchema = z.object({
   registrations: z.array(adminAnalyticsRegistrationRowSchema),
 });
 
+export const adminAnalyticsEventReferenceSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+});
+
+export const adminAnalyticsDateRangeSchema = z.object({
+  from: analyticsDateSchema.nullable(),
+  to: analyticsDateSchema.nullable(),
+});
+
+export const adminAnalyticsRegistrationSummarySchema = z.object({
+  total_registrations: z.number().int().nonnegative(),
+  confirmed: z.number().int().nonnegative(),
+  cancelled: z.number().int().nonnegative(),
+  waitlisted: z.number().int().nonnegative(),
+  refunded: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  checked_in_count: z.number().int().nonnegative(),
+  check_in_rate: z.string().min(1),
+});
+
+export const adminAnalyticsRevenueByEventSchema = z.object({
+  event_id: z.string().min(1),
+  title: z.string().min(1),
+  gross_revenue: z.number().int().nonnegative(),
+});
+
+export const adminAnalyticsRevenueSchema = z.object({
+  gross_revenue: z.number().int().nonnegative(),
+  net_revenue: z.number().int().nonnegative(),
+  total_refunded: z.number().int().nonnegative(),
+  average_ticket_price: z.number().int().nonnegative(),
+  currency: z.string().min(1),
+  revenue_by_event: z.array(adminAnalyticsRevenueByEventSchema),
+});
+
+export const adminAnalyticsTrendPointSchema = z.object({
+  date: analyticsDateSchema,
+  count: z.number().int().nonnegative(),
+  cumulative: z.number().int().nonnegative(),
+});
+
+export const adminAnalyticsRegistrationTrendsSchema = z.object({
+  peak_registration_day: analyticsDateSchema.nullable(),
+  daily: z.array(adminAnalyticsTrendPointSchema),
+});
+
+export const adminAnalyticsBatchVsSingleSchema = z.object({
+  single_registration_count: z.number().int().nonnegative(),
+  batch_registration_count: z.number().int().nonnegative(),
+  batch_submission_count: z.number().int().nonnegative(),
+  average_batch_size: z.number().nonnegative(),
+});
+
+export const adminAnalyticsCapacitySchema = z.object({
+  capacity: z.number().int().nonnegative(),
+  slots_filled: z.number().int().nonnegative(),
+  slots_remaining: z.number().int().nonnegative(),
+  waitlist_length: z.number().int().nonnegative(),
+  fill_rate: z.string().min(1),
+  capacity_override_count: z.number().int().nonnegative(),
+});
+
+export const adminAnalyticsSummaryResponseSchema = z.object({
+  events: z.array(adminAnalyticsEventReferenceSchema),
+  date_range: adminAnalyticsDateRangeSchema,
+  registration_summary: adminAnalyticsRegistrationSummarySchema,
+  revenue: adminAnalyticsRevenueSchema,
+  registration_trends: adminAnalyticsRegistrationTrendsSchema,
+  batch_vs_single: adminAnalyticsBatchVsSingleSchema,
+  capacity: adminAnalyticsCapacitySchema.optional(),
+});
+
 export type AnalyticsRegistrationState = z.infer<
   typeof analyticsRegistrationStateSchema
 >;
 export type AnalyticsPaymentStatus = z.infer<
   typeof analyticsPaymentStatusSchema
+>;
+export type AnalyticsDownloadFormat = z.infer<
+  typeof analyticsDownloadFormatSchema
 >;
 export type AnalyticsRefundStatus = z.infer<
   typeof analyticsRefundStatusSchema
@@ -148,6 +227,42 @@ export type AdminAnalyticsRegistrationRow = z.infer<
 export type AdminAnalyticsRegistrationsResponse = z.infer<
   typeof adminAnalyticsRegistrationsResponseSchema
 >;
+export type AdminAnalyticsEventReference = z.infer<
+  typeof adminAnalyticsEventReferenceSchema
+>;
+export type AdminAnalyticsDateRange = z.infer<
+  typeof adminAnalyticsDateRangeSchema
+>;
+export type AdminAnalyticsRegistrationSummary = z.infer<
+  typeof adminAnalyticsRegistrationSummarySchema
+>;
+export type AdminAnalyticsRevenueByEvent = z.infer<
+  typeof adminAnalyticsRevenueByEventSchema
+>;
+export type AdminAnalyticsRevenue = z.infer<
+  typeof adminAnalyticsRevenueSchema
+>;
+export type AdminAnalyticsTrendPoint = z.infer<
+  typeof adminAnalyticsTrendPointSchema
+>;
+export type AdminAnalyticsRegistrationTrends = z.infer<
+  typeof adminAnalyticsRegistrationTrendsSchema
+>;
+export type AdminAnalyticsBatchVsSingle = z.infer<
+  typeof adminAnalyticsBatchVsSingleSchema
+>;
+export type AdminAnalyticsCapacity = z.infer<
+  typeof adminAnalyticsCapacitySchema
+>;
+export type AdminAnalyticsSummaryResponse = z.infer<
+  typeof adminAnalyticsSummaryResponseSchema
+>;
+
+export type AdminAnalyticsSummaryParams = {
+  event_ids?: string[];
+  date_from?: string;
+  date_to?: string;
+};
 
 export type AdminAnalyticsRegistrationsParams = {
   event_ids?: string[];
@@ -169,4 +284,11 @@ export type AdminAnalyticsRegistrationsParams = {
   page_size?: number;
   sort_by?: AdminAnalyticsRegistrationSortBy;
   sort_order?: AdminAnalyticsSortOrder;
+};
+
+export type AdminAnalyticsDownloadParams = Omit<
+  AdminAnalyticsRegistrationsParams,
+  "page" | "page_size"
+> & {
+  format: AnalyticsDownloadFormat;
 };

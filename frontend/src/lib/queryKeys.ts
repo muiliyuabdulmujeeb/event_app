@@ -31,7 +31,7 @@ export const queryKeys = {
       ["refunds", "list", params] as const,
   },
   analytics: {
-    summary: (params: { eventIds?: string[]; dateFrom?: string; dateTo?: string }) =>
+    summary: (params: { event_ids?: string[]; date_from?: string; date_to?: string }) =>
       ["analytics", "summary", params] as const,
     registrations: (params: Record<string, unknown>) =>
       ["analytics", "registrations", params] as const,
