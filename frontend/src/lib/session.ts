@@ -28,8 +28,14 @@ export function getAuthSession(): AuthSession | null {
   try {
     const parsed = JSON.parse(rawValue);
     const result = sessionSchema.safeParse(parsed);
-    return result.success ? result.data : null;
+    if (result.success) {
+      return result.data;
+    }
+
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    return null;
   } catch {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
     return null;
   }
 }

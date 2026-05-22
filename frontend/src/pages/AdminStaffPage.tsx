@@ -58,6 +58,9 @@ export function AdminStaffPage() {
 
           <div className="table-wrap">
             <table className="data-table">
+              <caption className="sr-only">
+                Admin staff account list showing email, role, status, created date, and account actions.
+              </caption>
               <thead>
                 <tr>
                   <th scope="col">Account</th>

@@ -22,7 +22,6 @@ import { EventDetailPage } from "../pages/EventDetailPage";
 import { EventListPage } from "../pages/EventListPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { PaymentStatusPage } from "../pages/PaymentStatusPage";
-import { PlaceholderPage } from "../pages/PlaceholderPage";
 import { RegistrationLookupPage } from "../pages/RegistrationLookupPage";
 import { SingleRegistrationPage } from "../pages/SingleRegistrationPage";
 import { StaffDashboardPage } from "../pages/StaffDashboardPage";

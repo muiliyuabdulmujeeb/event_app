@@ -82,6 +82,12 @@ export function StaffNotificationsPage() {
             </p>
           </div>
 
+          {markReadMutation.isError ? (
+            <div className="form-alert" role="alert">
+              {markReadMutation.error.message}
+            </div>
+          ) : null}
+
           <div className="notification-list">
             {notificationsQuery.data.notifications.map((notification) => (
               <StaffNotificationCard

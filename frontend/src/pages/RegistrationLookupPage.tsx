@@ -215,6 +215,7 @@ export function RegistrationLookupPage() {
       {lookupQuery.isSuccess ? (
         <RegistrationLookupResult
           data={lookupQuery.data}
+          markSeenError={markSeenMutation.error?.message ?? null}
           markSeenPendingId={markSeenMutation.variables ?? null}
           onMarkSeen={(notificationId) => markSeenMutation.mutate(notificationId)}
           cancelForm={cancelForm}
@@ -238,6 +239,7 @@ export function RegistrationLookupPage() {
 
 function RegistrationLookupResult({
   data,
+  markSeenError,
   markSeenPendingId,
   onMarkSeen,
   cancelForm,
@@ -252,6 +254,7 @@ function RegistrationLookupResult({
   onInitializePayment,
 }: {
   data: RegistrationLookupResponse;
+  markSeenError: string | null;
   markSeenPendingId: string | null;
   onMarkSeen: (notificationId: string) => void;
   cancelForm: ReturnType<typeof useForm<OptionalReasonFormValues>>;
@@ -501,6 +504,12 @@ function RegistrationLookupResult({
           <h2 className="section-title">Unread notifications</h2>
           <p className="section-note">The backend lookup endpoint returns only unseen user notifications.</p>
         </div>
+
+        {markSeenError ? (
+          <div className="form-alert" role="alert">
+            {markSeenError}
+          </div>
+        ) : null}
 
         {notifications.length > 0 ? (
           <div className="notification-list">

@@ -1,71 +1,117 @@
 # Event Management App
 
-Phase 1 scaffolding for the event management platform described in `project_spec.md`.
+This repository contains the full Event Management application:
 
-## Overview
+- a FastAPI backend
+- a React + Vite frontend
+- PostgreSQL and Redis for local infrastructure
+- Celery workers for background processing
+- seed data for demos and UI walkthroughs
 
-This repository contains:
+## Current Scope
 
-- A FastAPI backend
-- A React + Vite frontend
-- PostgreSQL and Redis via Docker Compose
-- Celery worker scaffolding
-- Alembic scaffolding
-- A minimal pytest harness
+The combined backend and frontend currently support:
 
-## Prerequisites
+- staff authentication with access and refresh tokens
+- public event discovery and event detail
+- single and batch registration
+- payment initialization and callback guidance pages
+- registration lookup and self-service actions
+- staff registration operations, check-in, reverse check-in, and unread notifications
+- admin event management
+- admin staff management
+- admin registrations analytics table
+- admin refunds and notification dispatch
+- admin analytics summary with CSV and PDF exports
 
-- Docker
-- Docker Compose
+## Repository Layout
 
-## Environment Files
+- `backend/` - FastAPI app, Alembic, Celery worker, tests, and backend-local Docker Compose
+- `frontend/` - React app, Vite config, route pages, and shared client utilities
+- `docker-compose.yml` - root full-stack local container workflow
+- [backend/README.md](./backend/README.md) - backend setup, services, tests, and seed details
+- [frontend/README.md](./frontend/README.md) - frontend setup, routes, auth behavior, and known frontend limitations
 
-Copy the example files before starting:
+## Local Environment Files
 
-- Root backend/worker env: copy `.env.example` to `.env`
-- Frontend env: copy `frontend/.env.example` to `frontend/.env`
+Create the env files before running services:
 
-## Start The Stack
+- copy `.env.example` to `.env` for the root full-stack compose flow
+- copy `backend/.env.example` to `backend/.env` for backend-only compose work
+- copy `frontend/.env.example` to `frontend/.env` for local frontend development
+
+Minimum frontend requirement:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+## Local Run Options
+
+### Option 1. Full-stack root Docker Compose
+
+From the repository root:
 
 ```bash
 docker compose up --build
 ```
 
-Services exposed by default:
+Default services:
 
-- Backend: `http://localhost:8000`
-- Frontend: `http://localhost:3000`
-- API docs: `http://localhost:8000/docs`
+- frontend: [http://localhost:3000](http://localhost:3000)
+- backend API: [http://localhost:8000](http://localhost:8000)
+- API docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-## Run Backend Tests
+This root compose file includes:
+
+- `backend`
+- `worker`
+- `frontend`
+- `db`
+- `redis`
+- `seed`
+
+### Option 2. Backend compose plus frontend dev server
+
+Backend infrastructure and API:
 
 ```bash
-docker compose run --rm backend pytest tests/ -v
+cd backend
+docker compose up -d db redis
+docker compose run --rm migrate
+docker compose up backend worker
 ```
+
+Frontend dev server:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Default local URLs for this split workflow:
+
+- frontend dev server: [http://localhost:5173](http://localhost:5173)
+- backend API: [http://localhost:8000](http://localhost:8000)
 
 ## Seed Demo Data
 
-Phase `14.5B` adds an idempotent demo/dev seed runner in `backend/seed.py`.
+The backend includes an idempotent seed runner for demos, walkthroughs, and UI validation.
 
-Run it with:
+From the backend directory:
 
 ```bash
 docker compose run --rm seed
 ```
 
-The seed is additive and idempotent:
-
-- it creates or updates the known seed records by stable business keys
-- it does not wipe unrelated records
-- it is safe to rerun when you want to refresh the demo dataset
-
-All seeded staff accounts use this password:
+Shared seeded staff password:
 
 ```text
 SeedDemo123!
 ```
 
-Key seeded logins:
+Representative seeded logins:
 
 - `creator.admin@eventapp.local`
 - `delegated.admin@eventapp.local`
@@ -74,19 +120,36 @@ Key seeded logins:
 - `review.staff@eventapp.local`
 - `selected.staff@eventapp.local`
 
-Representative seeded registration IDs:
+See [backend/README.md](./backend/README.md) for the fuller seeded data breakdown.
 
-- `TEC-2026-RFD001` for completed refund history
-- `TEC-2026-RRQ001` for active refund request history
-- `WLT-2026-WTL001` for active waitlist promotion
-- `VIPX-2026-EXC001` for capacity override / exception registration
-- `VIPX-2026-CAN001` for preserved historical waitlist cancellation
+## Frontend Notes
 
-## Project Notes
+The frontend validates its env config at startup and shows an in-app error screen if `VITE_API_BASE_URL` is missing or invalid.
 
-The project now includes:
+If data loads through backend `/docs` but the browser app shows connection errors, check:
 
-- full backend business flows through Phase `14.5A`
-- admin analytics and exports
-- operational dead-letter handling for failed async email work
-- a reusable demo seed dataset for local testing and UI work
+1. frontend `.env`
+2. backend CORS configuration
+3. that the backend API is reachable at the exact `VITE_API_BASE_URL`
+
+## Testing and Verification
+
+Frontend:
+
+```bash
+cd frontend
+npm run typecheck
+npm run build
+```
+
+Backend:
+
+```bash
+cd backend
+docker compose run --rm --no-deps backend pytest tests/ -v
+```
+
+## Additional Documentation
+
+- [backend/README.md](./backend/README.md)
+- [frontend/README.md](./frontend/README.md)

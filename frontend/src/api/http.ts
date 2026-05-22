@@ -4,7 +4,7 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 
-import { env } from "../config/env";
+import { getAppEnv } from "../config/env";
 import { normalizeApiError } from "../lib/apiError";
 import {
   clearAuthSession,
@@ -20,6 +20,8 @@ type ExtendedAxiosRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
   skipAuthRefresh?: boolean;
 };
+
+const env = getAppEnv();
 
 export const http = axios.create({
   baseURL: env.VITE_API_BASE_URL,

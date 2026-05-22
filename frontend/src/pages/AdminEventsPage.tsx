@@ -63,6 +63,9 @@ export function AdminEventsPage() {
 
           <div className="table-wrap">
             <table className="data-table">
+              <caption className="sr-only">
+                Admin event inventory showing event state, pricing, capacity, registration totals, and edit actions.
+              </caption>
               <thead>
                 <tr>
                   <th scope="col">Event</th>

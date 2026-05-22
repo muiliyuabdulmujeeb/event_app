@@ -404,6 +404,9 @@ export function AdminAnalyticsPage() {
 
               <div className="table-wrap">
                 <table className="data-table">
+                  <caption className="sr-only">
+                    Revenue by event for the current analytics scope.
+                  </caption>
                   <thead>
                     <tr>
                       <th scope="col">Event</th>
@@ -451,6 +454,9 @@ export function AdminAnalyticsPage() {
             ) : (
               <div className="table-wrap">
                 <table className="data-table">
+                  <caption className="sr-only">
+                    Daily registration trend for the current analytics scope, including daily counts and cumulative totals.
+                  </caption>
                   <thead>
                     <tr>
                       <th scope="col">Date</th>

@@ -458,6 +458,9 @@ export function AdminRegistrationsPage() {
           <>
             <div className="table-wrap">
               <table className="data-table">
+                <caption className="sr-only">
+                  Admin registrations analytics table showing attendee, event, state, payment, operational flags, and expandable details.
+                </caption>
                 <thead>
                   <tr>
                     <th scope="col">Registration</th>
