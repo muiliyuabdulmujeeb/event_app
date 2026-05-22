@@ -11,6 +11,8 @@ import { AdminCreateEventPage } from "../pages/AdminCreateEventPage";
 import { AdminDashboardPage } from "../pages/AdminDashboardPage";
 import { AdminEditEventPage } from "../pages/AdminEditEventPage";
 import { AdminEventsPage } from "../pages/AdminEventsPage";
+import { AdminStaffDetailPage } from "../pages/AdminStaffDetailPage";
+import { AdminStaffPage } from "../pages/AdminStaffPage";
 import { BatchRegistrationPage } from "../pages/BatchRegistrationPage";
 import { EventDetailPage } from "../pages/EventDetailPage";
 import { EventListPage } from "../pages/EventListPage";
@@ -122,23 +124,11 @@ export function AppRoutes() {
             },
             {
               path: "/admin/staff",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Admin"
-                  title="Staff management"
-                  description="Staff account management, access modes, and selected-event assignment will be implemented later."
-                />
-              ),
+              element: <AdminStaffPage />,
             },
             {
               path: "/admin/staff/:staffId",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Admin"
-                  title="Staff account details"
-                  description="This route is reserved for detailed staff access management."
-                />
-              ),
+              element: <AdminStaffDetailPage />,
             },
             {
               path: "/admin/registrations",

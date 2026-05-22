@@ -213,6 +213,10 @@ a:focus-visible {
   gap: 1.5rem;
 }
 
+.page-stack--compact {
+  gap: 1rem;
+}
+
 .auth-form {
   display: grid;
   gap: 1rem;
@@ -493,6 +497,11 @@ a:focus-visible {
   align-items: flex-start;
   gap: 0.75rem;
   color: var(--color-text);
+}
+
+.checkbox-card--neutral {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
 }
 
 .checkbox-input {
@@ -815,6 +824,41 @@ a:focus-visible {
   align-content: center;
 }
 
+.selected-event-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.selected-event-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background: var(--color-surface-muted);
+}
+
+.selected-event-item__content {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.selected-event-item__title,
+.selected-event-item__meta {
+  margin: 0;
+}
+
+.selected-event-item__title {
+  color: var(--color-primary-strong);
+  font-size: 1rem;
+}
+
+.selected-event-item__meta {
+  color: var(--color-text-muted);
+}
+
 .dashboard-shell {
   min-height: 100vh;
   display: grid;
@@ -881,7 +925,8 @@ a:focus-visible {
   .events-section__header,
   .section-header,
   .participant-card__header,
-  .result-card__header {
+  .result-card__header,
+  .selected-event-item {
     align-items: stretch;
     flex-direction: column;
   }
