@@ -777,6 +777,11 @@ a:focus-visible {
   margin-top: 1.25rem;
 }
 
+.refund-action-grid {
+  display: grid;
+  gap: 1rem;
+}
+
 .result-card {
   display: grid;
   gap: 1rem;

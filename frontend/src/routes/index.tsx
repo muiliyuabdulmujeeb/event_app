@@ -11,7 +11,9 @@ import { AdminCreateEventPage } from "../pages/AdminCreateEventPage";
 import { AdminDashboardPage } from "../pages/AdminDashboardPage";
 import { AdminEditEventPage } from "../pages/AdminEditEventPage";
 import { AdminEventsPage } from "../pages/AdminEventsPage";
+import { AdminNotificationsPage } from "../pages/AdminNotificationsPage";
 import { AdminRegistrationsPage } from "../pages/AdminRegistrationsPage";
+import { AdminRefundsPage } from "../pages/AdminRefundsPage";
 import { AdminStaffDetailPage } from "../pages/AdminStaffDetailPage";
 import { AdminStaffPage } from "../pages/AdminStaffPage";
 import { BatchRegistrationPage } from "../pages/BatchRegistrationPage";
@@ -137,23 +139,11 @@ export function AppRoutes() {
             },
             {
               path: "/admin/refunds",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Admin"
-                  title="Refund requests"
-                  description="Refund request review and processing will be implemented in a later phase."
-                />
-              ),
+              element: <AdminRefundsPage />,
             },
             {
               path: "/admin/notifications",
-              element: (
-                <PlaceholderPage
-                  eyebrow="Admin"
-                  title="Notification dispatch"
-                  description="Admin-triggered notifications will be added once the shared admin API layer is connected."
-                />
-              ),
+              element: <AdminNotificationsPage />,
             },
             {
               path: "/admin/analytics",
